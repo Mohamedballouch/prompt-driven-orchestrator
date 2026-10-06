@@ -815,7 +815,9 @@ describe("StatsCharts — harness drill-down (#638)", () => {
       expect(screen.getByTestId("stats-harness-card-claude")).not.toHaveTextContent("avg");
       expect(screen.getByTestId("stats-harness-card-copilot")).toHaveTextContent("$2.00");
       expect(screen.getByTestId("stats-harness-card-opencode")).toHaveTextContent("—");
-      expect(screen.getByTestId("stats-cost-coverage")).toHaveTextContent(/partial|unavailable/);
+      expect(screen.getByTestId("stats-cost-coverage")).toHaveTextContent(
+        formatCoverage(COST.total.coverage, "run"),
+      );
       expect(screen.getByTestId("stats-selection-headline")).toHaveTextContent(
         "~$7.00† total · ~$1.50† median per Run",
       );

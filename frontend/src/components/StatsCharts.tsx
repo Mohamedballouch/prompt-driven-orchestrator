@@ -835,7 +835,7 @@ function HarnessCards({ aggregate }: { aggregate: StatsCostAggregate }) {
           <div className="font-mono text-fg" style={{ fontSize: "15px" }}>
             {formatCostAmount(metric.usd, metric.partial, metric.estimated)}
           </div>
-          <div className="mt-1 text-fg-4" style={{ fontSize: "10px" }}>
+          <div className="mt-1 text-fg-3" style={{ fontSize: "10px" }}>
             {metric.median_usd === null
               ? `— median per ${costUnitNoun(metric.unit)}`
               : `${formatCostAmount(metric.median_usd, metric.partial, metric.estimated)} median per ${costUnitNoun(metric.unit)}`}
