@@ -2298,7 +2298,7 @@ Expected: FAIL (module missing).
 - [ ] **Step 5: Implement `hooks/useDashboard.ts`**
 
 ```ts
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchDashboard, fetchStatsCost } from "../api";
 import type { DashboardSummary, StatsCost, WsMessage } from "../types";
 import { dashboardWindow, type DashboardPeriod } from "../lib/dashboardMetrics";
@@ -2334,8 +2334,8 @@ function message(error: unknown): string {
 
 export function useDashboard({ active, period, project, subscribe }: UseDashboardOptions): DashboardData {
   // The window is recomputed per period, not per render, so `from`/`to` are stable keys.
-  const [window, setWindow] = useState(() => dashboardWindow(period));
-  useEffect(() => setWindow(dashboardWindow(period)), [period]);
+  // (`range`, not `window`: never shadow the browser global.)
+  const range = useMemo(() => dashboardWindow(period), [period]);
 
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -2349,7 +2349,7 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
   const loadSummary = useCallback(() => {
     const seq = ++summarySeq.current;
     setSummaryLoading(true);
-    fetchDashboard(window.from, window.to, project)
+    fetchDashboard(range.from, range.to, project)
       .then((data) => {
         if (seq !== summarySeq.current) return;
         setSummary(data);
@@ -2362,12 +2362,12 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
       .finally(() => {
         if (seq === summarySeq.current) setSummaryLoading(false);
       });
-  }, [window.from, window.to, project]);
+  }, [range.from, range.to, project]);
 
   const loadCost = useCallback(() => {
     const seq = ++costSeq.current;
     setCostLoading(true);
-    fetchStatsCost(window.from, window.to, "day", false, false, project)
+    fetchStatsCost(range.from, range.to, "day", false, false, project)
       .then((data) => {
         if (seq !== costSeq.current) return;
         setCost(data);
@@ -2380,7 +2380,7 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
       .finally(() => {
         if (seq === costSeq.current) setCostLoading(false);
       });
-  }, [window.from, window.to, project]);
+  }, [range.from, range.to, project]);
 
   useEffect(() => {
     if (!active) return;
@@ -2410,7 +2410,7 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
   }, [loadSummary, loadCost]);
 
   return {
-    window,
+    window: range,
     summary,
     summaryError,
     summaryStale: summaryError !== null && summary !== null,
