@@ -314,6 +314,28 @@ vi.mock("./api", () => {
         by_project: [],
         resolved: [],
       }),
+      // UI05: the Dashboard (the landing view) reads its summary on mount — a
+      // fresh instance with nothing to report.
+      fetchDashboard: vi.fn().mockResolvedValue({
+        computed_at: "2026-07-01T10:00:00.000Z",
+        from: "2026-06-02T00:00:00.000Z",
+        to: "2026-07-02T00:00:00.000Z",
+        project: null,
+        first_run_at: null,
+        projects: [],
+        cohort: {
+          started: 0, completed: 0, failed: 0, halted: 0, skipped: 0,
+          archived: 0, running: 0, awaiting_user: 0, paused: 0,
+        },
+        completion: { completed: 0, eligible: 0, rate: null },
+        completion_time: { measured: 0, median_ms: null, p95_ms: null },
+        live: { running: 0, awaiting_user: 0, paused: 0 },
+        attention_total: 0,
+        attention: [],
+        active_total: 0,
+        active: [],
+        recent_results: [],
+      }),
       fetchStatsPerformance: vi.fn().mockResolvedValue({
         harnesses: [],
         total: { harnesses: [] },
@@ -600,7 +622,11 @@ describe("App — Assistant and Info toolbar buttons are exclusive (#938)", () =
     const user = userEvent.setup();
     seedTemplate();
     render(<App />);
+    // UI05: a tab seeded before mount sits under the landing Dashboard — go back
+    // to the editor so the toolbar under test is the one a user sees.
+    await user.click(await screen.findByRole("button", { name: "Back to editor" }));
     await screen.findByTestId("toolbar-assistant");
+    expect(screen.getByTestId("center-editor")).toBeVisible();
     return user;
   }
 

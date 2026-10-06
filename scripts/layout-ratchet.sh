@@ -93,8 +93,13 @@ cd "$(git rev-parse --show-toplevel)"
 # live attention, folded from the run projection. It is neither cost (stats.rs)
 # nor execution performance (stats_performance.rs), and it consumes both's
 # shared identity rule (stats::project_identity_for_root) instead of copying it.
+# frontend/src/components: 208 (UI05, docs/plans/dashboard-and-analytics.md) admits
+# Dashboard.tsx and its test — ONE concern: the landing view of live attention,
+# active work, recorded spend and recent results. Its pure logic lives in
+# lib/dashboardMetrics.ts and its data in hooks/useDashboard.ts; it reuses the
+# Stats cost formatting (lib/costLabel.ts) instead of a parallel analytics stack.
 BASELINES='
-frontend/src/components 206
+frontend/src/components 208
 crates/pdo-daemon/src 94
 '
 

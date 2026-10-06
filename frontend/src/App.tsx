@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
 import { usePanelRef } from "react-resizable-panels";
-import { ArrowLeft, GitFork, Settings, BarChart3 } from "lucide-react";
+import { ArrowLeft, GitFork, Settings, BarChart3, LayoutDashboard } from "lucide-react";
 import { useDaemonSocket } from "./hooks/useDaemonSocket";
 import type { ConnectionStatus } from "./hooks/useDaemonSocket";
 import { useResizableLayout } from "./hooks/useResizableLayout";
@@ -26,6 +26,7 @@ import { IDLE as UPDATE_IDLE, isUpdateInProgress, reduceUpdateFlow, type UpdateF
 import { useUpdateStatus } from "./hooks/useUpdateStatus";
 import type { UpdateStatus } from "./types";
 import StatsModal from "./components/StatsModal";
+import Dashboard from "./components/Dashboard";
 import ConflictModal from "./components/ConflictModal";
 import SaveErrorModal from "./components/SaveErrorModal";
 import ConfirmCloseTabsModal from "./components/ConfirmCloseTabsModal";
@@ -274,6 +275,10 @@ export default function App() {
   const [statsEntry, setStatsEntry] = useState<{ key: number; intent?: StatsOpenIntent }>({
     key: 0,
   });
+  // UI05: the Dashboard is the landing view. It shows whenever no editor tab is
+  // open, and on demand over open tabs, which stay mounted (hidden) underneath
+  // so unsaved edits, the canvas viewport and terminals survive the trip.
+  const [dashboardOpen, setDashboardOpen] = useState(true);
   const openSettings = useCallback((position?: SettingsPosition) => {
     if (position) setSettingsEntry((entry) => ({ key: entry.key + 1, position }));
     setStatsOpen(false);
@@ -383,6 +388,16 @@ export default function App() {
   // inspector reads, never writes — Config instead of Edit.
   const runLocked = isRunTabLocked(editTab);
   const hasEditTab = editTab != null;
+  // UI05: activating another tab (a pipeline opened from the library, a run tab)
+  // leaves the Dashboard; the first render's id is not a navigation. Adjusted
+  // during render from the previous id (not in an effect), so no frame of the
+  // Dashboard is painted over the tab that was just opened.
+  const [seenActiveTabId, setSeenActiveTabId] = useState(editActiveTabId);
+  if (editActiveTabId !== seenActiveTabId) {
+    setSeenActiveTabId(editActiveTabId);
+    if (editActiveTabId) setDashboardOpen(false);
+  }
+  const dashboardVisible = !hasEditTab || dashboardOpen;
   // #684: which pane a selected node gets. Markers (start/end) never reach the
   // generic `NodeInspector` — outside a run they get a read-only pane.
   const nodeInspectorKind = resolveNodeInspector({
@@ -693,6 +708,9 @@ export default function App() {
 
   const handleSelectRun = useCallback(
     async (runId: string) => {
+      // UI05: selecting a Run shows its canvas, even when its tab is already the
+      // active one behind the Dashboard.
+      setDashboardOpen(false);
       // #723: any navigation away from the child run ends the back-bar story
       // and any pending Orchestration-tab landing — both are one gesture old.
       // (Purely derived visibility does the rest: the bar only ever renders
@@ -745,12 +763,23 @@ export default function App() {
     setSelection({ kind: "node", id: nodeId });
   }, [orchestratorReturn, handleSelectRun, setSelection, setLandOnOrchestration]);
 
+  // UI05: the Dashboard's « Open » — the Run's canvas, and the Node an attention
+  // item names. Opening only: nothing is approved, retried or resumed.
+  const handleOpenFromDashboard = useCallback(
+    async (runId: string, nodeId?: string | null) => {
+      await handleSelectRun(runId);
+      if (nodeId) setSelection({ kind: "node", id: nodeId });
+    },
+    [handleSelectRun, setSelection],
+  );
+
   useEffect(() => {
     // #315: never fire a save for an archived run — the tab is read-only and a
     // PUT would 404. `isActiveRunArchived` also removes this listener the moment
     // the open run flips to archived (via refreshRun).
     // ADR-0080: nor for a run followed in « pilotage » — nothing to save.
-    if (!hasEditTab || isActiveRunArchived || runLocked) return;
+    // UI05: nor while the Dashboard hides the canvas.
+    if (!hasEditTab || dashboardVisible || isActiveRunArchived || runLocked) return;
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
@@ -759,7 +788,7 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [hasEditTab, isActiveRunArchived, runLocked, editActiveTabId, editSave]);
+  }, [hasEditTab, dashboardVisible, isActiveRunArchived, runLocked, editActiveTabId, editSave]);
 
   // Canvas undo/redo (ADR-0014 / #226): Ctrl/Cmd+Z undo, Ctrl/Cmd+Shift+Z or
   // Ctrl/Cmd+Y redo. Sibling to the Ctrl+S effect above, but — unlike Save — it
@@ -768,11 +797,12 @@ export default function App() {
   // unit-testable without rendering the canvas; this effect just wires it up.
   useEffect(() => {
     // #315: undo/redo are edit affordances — off for a read-only archived run.
-    if (!hasEditTab || isActiveRunArchived) return;
+    // UI05: and off while the Dashboard hides the canvas.
+    if (!hasEditTab || dashboardVisible || isActiveRunArchived) return;
     const handler = (e: KeyboardEvent) => handleUndoRedoKeydown(e, editUndo, editRedo);
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [hasEditTab, isActiveRunArchived, editUndo, editRedo]);
+  }, [hasEditTab, dashboardVisible, isActiveRunArchived, editUndo, editRedo]);
 
   // #368: keep the ref in step with the selected Trigger so the stable WS
   // callback below reads the committed value, not the stale-null closure.
@@ -940,6 +970,8 @@ export default function App() {
       <TopBar
         onOpenSettings={() => openSettings()}
         onOpenStats={() => openStats()}
+        onOpenDashboard={() => setDashboardOpen(true)}
+        dashboardActive={dashboardVisible}
       />
       <main className="min-h-0 flex-1">
         <ResizablePanelGroup
@@ -972,49 +1004,59 @@ export default function App() {
           <ResizableHandle />
 
           <ResizablePanel defaultSize={layout.defaultLayout.center} id="center">
-            {hasEditTab ? (
-              <div className="flex h-full min-w-0 flex-col">
-                <TabBar projects={projects} />
-                {orchestratorReturn && selectedRun?.run_id === orchestratorReturn.childRunId && (
-                  <button
-                    type="button"
-                    data-testid="orchestrator-back-bar"
-                    onClick={handleBackToOrchestrator}
-                    className="flex shrink-0 cursor-pointer items-center gap-1.5 border-b border-line bg-bg-2 px-3 py-1 text-fg-3 transition-colors hover:text-fg"
-                    style={{ fontSize: "11px" }}
-                    title="Back to the orchestrator node, on its Orchestration tab"
-                  >
-                    <ArrowLeft size={12} />
-                    <span>
-                      Back to <span className="font-medium text-fg-2">{orchestratorReturn.nodeName}</span>
-                      <span className="text-fg-4"> · {orchestratorReturn.parentRunName}</span>
-                    </span>
-                    <span className="ml-auto flex items-center gap-1 text-fg-4" style={{ fontSize: "10px" }}>
-                      <GitFork size={10} /> child run
-                    </span>
-                  </button>
-                )}
-                <EditCanvas
-                  libraryEntries={libraryEntries}
-                  onLibraryDelete={async (name) => {
-                    const { deleteFromLibrary: delLib } = await import("./api");
-                    await delLib(name);
-                    refreshLibrary();
-                  }}
-                  infoOpen={infoActive}
-                  onToggleInfo={handleToggleInfo}
-                  onCloseInfo={handleCloseInfo}
-                  assistantActive={assistantActive}
-                  onOpenAssistant={handleToggleAssistant}
-                  runState={selectedRun}
-                  onSelectRun={handleSelectRun}
-                  rightPaneCollapsed={rightPaneCollapsed}
-                />
+            {/* UI05: open tabs stay mounted (hidden) under the Dashboard, so
+                unsaved edits, the canvas viewport and terminals survive the trip. */}
+            {hasEditTab && (
+              <div hidden={dashboardVisible} className="h-full" data-testid="center-editor">
+                <div className="flex h-full min-w-0 flex-col">
+                  <TabBar projects={projects} />
+                  {orchestratorReturn && selectedRun?.run_id === orchestratorReturn.childRunId && (
+                    <button
+                      type="button"
+                      data-testid="orchestrator-back-bar"
+                      onClick={handleBackToOrchestrator}
+                      className="flex shrink-0 cursor-pointer items-center gap-1.5 border-b border-line bg-bg-2 px-3 py-1 text-fg-3 transition-colors hover:text-fg"
+                      style={{ fontSize: "11px" }}
+                      title="Back to the orchestrator node, on its Orchestration tab"
+                    >
+                      <ArrowLeft size={12} />
+                      <span>
+                        Back to <span className="font-medium text-fg-2">{orchestratorReturn.nodeName}</span>
+                        <span className="text-fg-4"> · {orchestratorReturn.parentRunName}</span>
+                      </span>
+                      <span className="ml-auto flex items-center gap-1 text-fg-4" style={{ fontSize: "10px" }}>
+                        <GitFork size={10} /> child run
+                      </span>
+                    </button>
+                  )}
+                  <EditCanvas
+                    libraryEntries={libraryEntries}
+                    onLibraryDelete={async (name) => {
+                      const { deleteFromLibrary: delLib } = await import("./api");
+                      await delLib(name);
+                      refreshLibrary();
+                    }}
+                    infoOpen={infoActive}
+                    onToggleInfo={handleToggleInfo}
+                    onCloseInfo={handleCloseInfo}
+                    assistantActive={assistantActive}
+                    onOpenAssistant={handleToggleAssistant}
+                    runState={selectedRun}
+                    onSelectRun={handleSelectRun}
+                    rightPaneCollapsed={rightPaneCollapsed}
+                  />
+                </div>
               </div>
-            ) : (
-              <div className="flex h-full items-center justify-center text-fg-4" style={{ fontSize: "12px" }}>
-                Select a run or open a pipeline to get started
-              </div>
+            )}
+            {dashboardVisible && (
+              <Dashboard
+                connection={status}
+                subscribe={subscribe}
+                onOpenRun={handleOpenFromDashboard}
+                onStartRun={() => openNewRunModal({ kind: "run" })}
+                onOpenStats={() => openStats()}
+                onBackToEditor={hasEditTab ? () => setDashboardOpen(false) : undefined}
+              />
             )}
           </ResizablePanel>
 
@@ -1298,9 +1340,13 @@ export default function App() {
 function TopBar({
   onOpenSettings,
   onOpenStats,
+  onOpenDashboard,
+  dashboardActive,
 }: {
   onOpenSettings: () => void;
   onOpenStats: () => void;
+  onOpenDashboard: () => void;
+  dashboardActive: boolean;
 }) {
   return (
     <header
@@ -1322,8 +1368,19 @@ function TopBar({
         PDO
       </div>
 
-      {/* Right-aligned action group: stats (#377) then the settings gear (#129). */}
+      {/* Right-aligned action group: the Dashboard (UI05), stats (#377) then the
+          settings gear (#129). */}
       <div className="ml-auto flex items-center gap-1">
+        <button
+          onClick={onOpenDashboard}
+          aria-label="Dashboard"
+          aria-pressed={dashboardActive}
+          data-testid="open-dashboard"
+          title="Dashboard"
+          className="grid h-6 w-6 place-items-center rounded text-fg-3 transition-colors hover:bg-bg-5 hover:text-fg aria-pressed:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-acc"
+        >
+          <LayoutDashboard size={15} />
+        </button>
         <button
           onClick={onOpenStats}
           aria-label="Open stats"
