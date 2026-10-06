@@ -1,4 +1,4 @@
-import type { PipelineListEntry, PipelineValidation, PipelineDetail, PipelineDef, RunListEntry, RunState, PortDef, PortSide, PortType, FrontmatterFieldDecl, FrontmatterViolation, Trigger, TriggerFire, DaemonStatus, InstanceSettings, UpdateSettingsRequest, StatsOverview, StatsCost, StatsPerformance, StatsAbsorption, StatsAbsorptionList, SandboxProfile, SandboxProfileImage, SandboxProfileReferents, SyncCostPricesReport, UpdateStatus, UpdateChangelog, UpdateApplyResponse, Project, BranchList, FastForwardOutcome, FastForwardRefusal, FastForwardResult, SourceDrift, AgentChoice, AgentProfile, AgentProfileReferents, ProvisioningPlan, ProvisioningRules, Skill, SkillBank, SkillDetail, SkillFile, SkillFileContent, SkillFilesUpload, SkillFolder, SkillReferents, SkillRef, SkillScanResult, SkillImportItem, SkillImportReport, SkillRescanReport, RecentSkillSource, StructuredDiff, RunRefs,
+import type { PipelineListEntry, PipelineValidation, PipelineDetail, PipelineDef, RunListEntry, RunState, PortDef, PortSide, PortType, FrontmatterFieldDecl, FrontmatterViolation, Trigger, TriggerFire, DaemonStatus, InstanceSettings, UpdateSettingsRequest, StatsOverview, StatsCost, DashboardSummary, StatsPerformance, StatsAbsorption, StatsAbsorptionList, SandboxProfile, SandboxProfileImage, SandboxProfileReferents, SyncCostPricesReport, UpdateStatus, UpdateChangelog, UpdateApplyResponse, Project, BranchList, FastForwardOutcome, FastForwardRefusal, FastForwardResult, SourceDrift, AgentChoice, AgentProfile, AgentProfileReferents, ProvisioningPlan, ProvisioningRules, Skill, SkillBank, SkillDetail, SkillFile, SkillFileContent, SkillFilesUpload, SkillFolder, SkillReferents, SkillRef, SkillScanResult, SkillImportItem, SkillImportReport, SkillRescanReport, RecentSkillSource, StructuredDiff, RunRefs,
   ReviewCommentsListResponse,
   ReviewDecisionResponse,
   SendReviewCommentInput,
@@ -507,6 +507,20 @@ export function fetchStatsOverview(
 }
 
 /**
+ * The Dashboard's bounded summary (UI04): live attention, active Runs, recent
+ * results and the outcomes of the Runs started in `[from, to)`. Read-only.
+ */
+export function fetchDashboard(
+  from: string,
+  to: string,
+  project: string | null,
+): Promise<DashboardSummary> {
+  return request<DashboardSummary>("GET", "/stats/dashboard", {
+    query: { from, to, ...(project ? { project } : {}) },
+  });
+}
+
+/**
  * Estimated cost over `[from, to)`, folded by period/pipeline/project (#377,
  * ADR-0022/0029). Heavy (memoized per-run cost fanned over the window) — fetch
  * lazily, only when the cost tab is shown.
@@ -517,6 +531,7 @@ export function fetchStatsCost(
   bucket: string,
   completedOnly = false,
   uncombined = false,
+  project: string | null = null,
 ): Promise<StatsCost> {
   return request<StatsCost>("GET", "/stats/cost", {
     query: {
@@ -525,6 +540,7 @@ export function fetchStatsCost(
       bucket,
       ...(completedOnly ? { completed_only: true } : {}),
       ...(uncombined ? { uncombined: true } : {}),
+      ...(project ? { project } : {}),
     },
   });
 }

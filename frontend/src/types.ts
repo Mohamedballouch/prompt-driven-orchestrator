@@ -2586,3 +2586,36 @@ export interface StructuredDiff {
   deletions: number;
   files_changed: number;
 }
+
+// ---- Dashboard (UI04, docs/reference/dashboard-metrics.md) ----
+export type AttentionKind = "waiting_for_user" | "blocked" | "failed";
+export interface DashboardProject { id: string; name: string; runs: number }
+export interface DashboardCohort {
+  started: number; completed: number; failed: number; halted: number; skipped: number;
+  archived: number; running: number; awaiting_user: number; paused: number;
+}
+export interface DashboardCompletion { completed: number; eligible: number; rate: number | null }
+export interface DashboardCompletionTime { measured: number; median_ms: number | null; p95_ms: number | null }
+export interface DashboardLive { running: number; awaiting_user: number; paused: number }
+export interface DashboardAttentionItem {
+  kind: AttentionKind; run_id: string; run_name: string | null; pipeline_name: string;
+  project_id: string; project_name: string; node_id: string | null; node_name: string | null;
+  reason: string | null; since: string | null;
+}
+export interface DashboardNodeRef { id: string; name: string; status: NodeStatus }
+export interface DashboardActiveRun {
+  run_id: string; run_name: string | null; pipeline_name: string; project_id: string; project_name: string;
+  status: RunStatus; started_at: string | null; current_nodes: DashboardNodeRef[];
+  cost_usd: number | null; cost_partial: boolean;
+}
+export interface DashboardResult {
+  run_id: string; run_name: string | null; pipeline_name: string; project_id: string; project_name: string;
+  completed_at: string; duration_ms: number | null; review_pending: number;
+}
+export interface DashboardSummary {
+  computed_at: string; from: string; to: string; project: string | null; first_run_at: string | null;
+  projects: DashboardProject[]; cohort: DashboardCohort; completion: DashboardCompletion;
+  completion_time: DashboardCompletionTime; live: DashboardLive;
+  attention_total: number; attention: DashboardAttentionItem[];
+  active_total: number; active: DashboardActiveRun[]; recent_results: DashboardResult[];
+}
