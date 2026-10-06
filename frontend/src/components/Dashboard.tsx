@@ -13,6 +13,7 @@ import {
   OctagonAlert,
   Play,
   RefreshCw,
+  SquareArrowOutUpRight,
   TriangleAlert,
   type LucideIcon,
 } from "lucide-react";
@@ -96,6 +97,32 @@ function lastSegment(id: string): string {
   return id.split("/").filter(Boolean).pop() ?? id;
 }
 
+/** The socket starts « disconnected » before its first open: no banner during
+ *  this grace unless it had been connected and dropped. */
+const DISCONNECT_GRACE_MS = 3_000;
+
+/** Whether the « Daemon disconnected » banner is earned: the socket was connected
+ *  and dropped, or it has not connected for {@link DISCONNECT_GRACE_MS}. */
+function useDisconnectBanner(connection: ConnectionStatus): boolean {
+  const [wasConnected, setWasConnected] = useState(connection === "connected");
+  if (connection === "connected" && !wasConnected) setWasConnected(true);
+  const [graceOver, setGraceOver] = useState(false);
+  useEffect(() => {
+    if (connection === "connected") return;
+    const id = setTimeout(() => setGraceOver(true), DISCONNECT_GRACE_MS);
+    return () => clearTimeout(id);
+  }, [connection]);
+  return connection !== "connected" && (wasConnected || graceOver);
+}
+
+/** A Run's title and secondary line. Unnamed, it is titled by its Pipeline and told
+ *  apart by a short id — never the Pipeline name twice. */
+function runLabel(runName: string | null, pipelineName: string, runId: string) {
+  return runName
+    ? { title: runName, secondary: pipelineName, secondaryIsId: false }
+    : { title: pipelineName, secondary: runId.slice(-7), secondaryIsId: true };
+}
+
 export default function Dashboard({
   connection,
   subscribe,
@@ -111,6 +138,7 @@ export default function Dashboard({
   const data = useDashboard({ active: true, period, project, subscribe });
   const { summary, cost } = data;
   const now = useNow(CLOCK_TICK_MS);
+  const showDisconnected = useDisconnectBanner(connection);
 
   // The summary is bound to its request: right after a Project or period change it
   // is null until the new answer lands. The Project list (all Projects, whatever the
@@ -165,6 +193,9 @@ export default function Dashboard({
               </option>
             ))}
           </select>
+          <span className="text-fg-3" style={{ fontSize: "11px" }}>
+            Live now items ignore the period
+          </span>
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <Freshness
               loading={data.summaryLoading}
@@ -198,7 +229,7 @@ export default function Dashboard({
           </div>
         </header>
 
-        {connection !== "connected" && (
+        {showDisconnected && (
           <div
             role="status"
             className="flex items-center gap-2 rounded-md border border-st-await bg-st-await-bg px-3 py-2 text-fg"
@@ -254,16 +285,15 @@ export default function Dashboard({
             scope={scope}
             title="Completed runs"
             value={
-              summary ? (
+              summary && summary.completion.eligible > 0 ? (
                 <>
-                  {summary.completion.eligible > 0
-                    ? `${summary.completion.completed} of ${summary.completion.eligible}`
-                    : "—"}
+                  {`${summary.completion.completed} of ${summary.completion.eligible}`}
                   <span className="ml-2 text-fg-2" style={{ fontSize: "13px" }}>
                     {formatRate(summary.completion.rate)}
                   </span>
                 </>
               ) : (
+                // No eligible Run: one « — », not a « — » count beside a « — » rate.
                 "—"
               )
             }
@@ -328,7 +358,7 @@ export default function Dashboard({
           />
         </div>
 
-        <Panel id="dashboard-attention" title="Needs attention" scope="Live now">
+        <Panel id="dashboard-attention" title="Needs attention" scope="Live now · failures from the last 7 days">
           {!summary ? (
             <EmptyLine>{pendingText}</EmptyLine>
           ) : summary.attention.length === 0 ? (
@@ -378,7 +408,7 @@ export default function Dashboard({
           costError={!cost && !data.costLoading ? data.costError : null}
         />
 
-        <Panel id="dashboard-results" title="Recent results">
+        <Panel id="dashboard-results" title="Recent results" scope="Latest 8 · any date">
           {!summary ? (
             <EmptyLine>{pendingText}</EmptyLine>
           ) : summary.recent_results.length === 0 ? (
@@ -407,12 +437,16 @@ function Freshness({
   computedAt: string | null;
   now: Date;
 }) {
-  if (loading) return <span className="text-fg-3">Refreshing…</span>;
+  // The stale warning outlives a retry in flight: it goes only when one succeeds.
   if (stale && computedAt) {
     return (
-      <span className="text-st-await">Showing data from {relativeTime(computedAt, now)} — refresh failed</span>
+      <span className="flex flex-wrap items-center gap-x-2">
+        <span className="text-st-await">Showing data from {relativeTime(computedAt, now)} — refresh failed</span>
+        {loading && <span className="text-fg-3">Refreshing…</span>}
+      </span>
     );
   }
+  if (loading) return <span className="text-fg-3">Refreshing…</span>;
   if (computedAt) return <span className="text-fg-3">Updated {relativeTime(computedAt, now)}</span>;
   return null;
 }
@@ -513,16 +547,19 @@ function AttentionRow({
   onOpenRun: (runId: string, nodeId?: string | null) => void;
 }) {
   const kind = ATTENTION_KIND[item.kind];
-  const name = item.run_name ?? item.pipeline_name;
+  const label = runLabel(item.run_name, item.pipeline_name, item.run_id);
+  const nameId = useId();
   return (
     <li data-testid="dashboard-attention-item" className="flex items-center gap-3 border-t border-line px-3 py-2">
       <kind.Icon size={16} aria-hidden="true" className={`shrink-0 ${kind.tone}`} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2">
           <span className={`font-medium ${kind.tone}`}>{kind.label}</span>
-          <span className="truncate font-medium text-fg">{name}</span>
+          <span id={nameId} className="truncate font-medium text-fg">
+            {label.title}
+          </span>
           <span className="text-fg-3">
-            {item.pipeline_name}
+            <Secondary label={label} runId={item.run_id} />
             {item.node_name && ` · ${item.node_name}`}
           </span>
         </div>
@@ -540,13 +577,25 @@ function AttentionRow({
       </span>
       <button
         type="button"
-        aria-label={`Open ${name}`}
+        aria-label={`Open ${label.title}`}
+        aria-describedby={nameId}
         onClick={() => onOpenRun(item.run_id, item.node_id)}
         className={`shrink-0 ${SECONDARY_BUTTON}`}
       >
         Open
       </button>
     </li>
+  );
+}
+
+/** A Run's secondary line: its Pipeline, or — unnamed — its short id. */
+function Secondary({ label, runId }: { label: ReturnType<typeof runLabel>; runId: string }) {
+  return label.secondaryIsId ? (
+    <span className="font-mono" title={runId}>
+      {label.secondary}
+    </span>
+  ) : (
+    <>{label.secondary}</>
   );
 }
 
@@ -565,7 +614,7 @@ function ActiveRunRow({
   now: Date;
   onOpenRun: (runId: string, nodeId?: string | null) => void;
 }) {
-  const name = run.run_name ?? run.pipeline_name;
+  const label = runLabel(run.run_name, run.pipeline_name, run.run_id);
   const step = currentStep(run);
   return (
     <li data-testid="dashboard-active-run" className="border-t border-line">
@@ -575,8 +624,10 @@ function ActiveRunRow({
         className={`flex w-full flex-col gap-0.5 px-3 py-2 text-left transition-colors hover:bg-bg-3 ${FOCUS} focus-visible:ring-inset`}
       >
         <span className="flex w-full min-w-0 items-baseline gap-2">
-          <span className="truncate font-medium text-fg">{name}</span>
-          <span className="truncate text-fg-3">{run.pipeline_name}</span>
+          <span className="truncate font-medium text-fg">{label.title}</span>
+          <span className="truncate text-fg-3">
+            <Secondary label={label} runId={run.run_id} />
+          </span>
           <span className="ml-auto flex shrink-0 items-center gap-1.5 text-fg-2">
             <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT[run.status] ?? "bg-st-pending"}`} />
             {runStatusLabel(run.status)}
@@ -612,14 +663,17 @@ function ResultRow({
   now: Date;
   onOpenRun: (runId: string, nodeId?: string | null) => void;
 }) {
-  const name = result.run_name ?? result.pipeline_name;
+  const label = runLabel(result.run_name, result.pipeline_name, result.run_id);
+  const nameId = useId();
   return (
     <li data-testid="dashboard-result" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line px-3 py-2">
       <CircleCheck size={16} aria-hidden="true" className="shrink-0 text-st-done" />
       <div className="min-w-0 flex-1">
-        <div className="truncate font-medium text-fg">{name}</div>
+        <div id={nameId} className="truncate font-medium text-fg">
+          {label.title}
+        </div>
         <div className="text-fg-3" style={{ fontSize: "11px" }}>
-          {result.pipeline_name} · Completed {ago(result.completed_at, now)} · took{" "}
+          <Secondary label={label} runId={result.run_id} /> · Completed {ago(result.completed_at, now)} · took{" "}
           <span className="font-mono">{formatDuration(result.duration_ms) ?? "—"}</span>
           {result.review_pending > 0 && (
             <span className="text-st-await">
@@ -630,11 +684,26 @@ function ResultRow({
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        <button type="button" onClick={() => onOpenRun(result.run_id, null)} className={SECONDARY_BUTTON}>
+        <button
+          type="button"
+          onClick={() => onOpenRun(result.run_id, null)}
+          aria-describedby={nameId}
+          className={SECONDARY_BUTTON}
+        >
           Open result
         </button>
-        <a href={reviewUrl(result.run_id)} className={SECONDARY_BUTTON}>
+        {/* A new browser tab: a same-tab navigation would unload the App and
+            the unsaved edits of the tabs hidden under the Dashboard. */}
+        <a
+          href={reviewUrl(result.run_id)}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-describedby={nameId}
+          title="Opens the Review page in a new browser tab"
+          className={SECONDARY_BUTTON}
+        >
           Review changes
+          <SquareArrowOutUpRight size={11} aria-hidden="true" />
         </a>
       </div>
     </li>
@@ -681,7 +750,8 @@ function SpendTrend({
       </div>
       <div className="mt-3 flex gap-2">
         <div className="flex w-14 shrink-0 flex-col justify-between text-right font-mono text-fg-3" style={{ fontSize: "10px" }}>
-          <span>{hasSpend ? `$${max.toFixed(2)}` : "—"}</span>
+          {/* No recorded spend: no maximum to name — only the origin stays. */}
+          <span>{hasSpend ? `$${max.toFixed(2)}` : ""}</span>
           <span aria-hidden="true">0</span>
         </div>
         <div className="flex h-28 min-w-0 flex-1 items-end gap-px border-b border-line-strong">

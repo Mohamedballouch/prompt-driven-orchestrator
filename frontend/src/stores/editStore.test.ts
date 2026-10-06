@@ -2229,6 +2229,53 @@ describe("openPipeline (#320 / #216 canvas-open)", () => {
   });
 });
 
+// UI05 — App leaves the Dashboard when a user opens or focuses a tab, which the
+// store counts; a neighbour promoted by a close is not a user gesture.
+describe("activationSeq (UI05)", () => {
+  const seq = () => useEditStore.getState().activationSeq;
+
+  it("counts every open, re-opening the already active tab included", async () => {
+    const start = seq();
+    await useEditStore.getState().openPipeline("pipe-a");
+    expect(seq()).toBe(start + 1);
+    await useEditStore.getState().openPipeline("pipe-a");
+    expect(useEditStore.getState().activeTabId).toBe("pipe-a");
+    expect(seq()).toBe(start + 2);
+  });
+
+  it("counts opening and re-focusing a run tab, and a tab click", async () => {
+    const start = seq();
+    await useEditStore.getState().openRunPipeline("r1");
+    await useEditStore.getState().openRunPipeline("r1");
+    expect(seq()).toBe(start + 2);
+    useEditStore.getState().setActiveTab("__run__r1");
+    expect(seq()).toBe(start + 3);
+  });
+
+  it("does not count closing the active tab, though a neighbour becomes active", async () => {
+    await useEditStore.getState().openPipeline("pipe-a");
+    await useEditStore.getState().openPipeline("pipe-b");
+    const before = seq();
+    useEditStore.getState().closeTab("pipe-b");
+    expect(useEditStore.getState().activeTabId).toBe("pipe-a");
+    useEditStore.getState().closeTabs(["pipe-a"]);
+    expect(useEditStore.getState().activeTabId).toBeNull();
+    expect(seq()).toBe(before);
+  });
+
+  it("counts a parked single-tab open only once it is confirmed", async () => {
+    seedTab("dirty-tab", true);
+    useEditStore.setState({ singleTabMode: true });
+    const before = seq();
+    await useEditStore.getState().openPipeline("pipe-b");
+    expect(useEditStore.getState().pendingSingleTab).not.toBeNull();
+    expect(seq()).toBe(before);
+    useEditStore.getState().confirmPendingSingleTab();
+    expect(useEditStore.getState().activeTabId).toBe("pipe-b");
+    expect(seq()).toBe(before + 1);
+  });
+});
+
 // #342 — mass-close primitive + single-tab mode.
 describe("closeTabs (#342 atomic mass-close)", () => {
   function mkTab(id: string, over: Partial<OpenPipeline> = {}): OpenPipeline {

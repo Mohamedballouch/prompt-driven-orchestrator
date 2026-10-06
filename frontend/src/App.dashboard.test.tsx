@@ -5,7 +5,7 @@
 // Mounts the REAL App with the harness of App.settingsClose.test.tsx (FakeWebSocket,
 // ResizeObserver stub, an explicit `./api` factory that throws on an unlisted export).
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 class ResizeObserverStub {
@@ -100,6 +100,19 @@ vi.mock("./api", () => {
         prompts: {},
         diagnostics: [],
       }),
+      // A template tab runs the library assistant's lifecycle (ADR-0048) — kept idle.
+      putLibassistFocus: vi.fn().mockResolvedValue(undefined),
+      closeLibraryAssistant: vi.fn().mockResolvedValue(undefined),
+      openLibraryAssistant: vi.fn().mockReturnValue(new Promise(() => {})),
+      // A template opened as a tab (library row, Trigger): named after its id.
+      fetchPipeline: vi.fn().mockImplementation((id: string) =>
+        Promise.resolve({
+          scope: "repo",
+          pipeline: { name: id, version: "1.0", variables: {}, nodes: [], edges: [] },
+          prompts: {},
+          diagnostics: [],
+        }),
+      ),
       fetchSessions: vi.fn().mockResolvedValue({ live: 0, cap: 20, version: "9.9.9-test" }),
       fetchTriggers: vi.fn().mockResolvedValue([]),
       fetchTriggersHealth: vi.fn().mockResolvedValue({
@@ -230,6 +243,63 @@ describe("App — the Dashboard (UI05)", () => {
     expect(useEditStore.getState().openTabs.length).toBe(tabsBefore);
     await userEvent.click(screen.getByRole("button", { name: "Back to editor" }));
     await waitFor(() => expect(screen.getByTestId("center-editor")).toBeVisible());
+  }, 20_000);
+
+  it("folds the right pane away under the Dashboard, without unmounting it, and brings it back", async () => {
+    render(<App />);
+    await screen.findByTestId("dashboard");
+    await userEvent.click(await screen.findByTestId("run-display-label"));
+    await waitFor(() => expect(screen.queryByTestId("dashboard")).not.toBeInTheDocument());
+    const right = () => document.querySelector("[data-panel]#right")!;
+    await waitFor(() => expect(screen.getByTestId("pipeline-info-panel")).toBeInTheDocument());
+    expect(right()).not.toHaveAttribute("data-collapsed");
+
+    await userEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+    await screen.findByTestId("dashboard");
+    expect(right()).toHaveAttribute("data-collapsed", "true");
+    // Collapsed, not unmounted: the Run panel (and any terminal in it) is still there.
+    expect(screen.getByTestId("pipeline-info-panel")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Back to editor" }));
+    await waitFor(() => expect(right()).not.toHaveAttribute("data-collapsed"));
+  }, 20_000);
+
+  it("opening a pipeline from the fresh-visit Dashboard shows its canvas", async () => {
+    render(<App />);
+    await screen.findByTestId("dashboard");
+    await act(() => useEditStore.getState().openPipeline("tpl"));
+    await waitFor(() => expect(screen.queryByTestId("dashboard")).not.toBeInTheDocument());
+    expect(screen.getByTestId("center-editor")).toBeVisible();
+  }, 20_000);
+
+  it("re-opening the pipeline already active behind the Dashboard leaves the Dashboard", async () => {
+    render(<App />);
+    await screen.findByTestId("dashboard");
+    await act(() => useEditStore.getState().openPipeline("tpl"));
+    await waitFor(() => expect(screen.queryByTestId("dashboard")).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+    await screen.findByTestId("dashboard");
+    expect(useEditStore.getState().activeTabId).toBe("tpl");
+
+    await act(() => useEditStore.getState().openPipeline("tpl"));
+    await waitFor(() => expect(screen.queryByTestId("dashboard")).not.toBeInTheDocument());
+    expect(screen.getByTestId("center-editor")).toBeVisible();
+  }, 20_000);
+
+  it("closing the active tab under the Dashboard keeps the Dashboard", async () => {
+    render(<App />);
+    await screen.findByTestId("dashboard");
+    await act(() => useEditStore.getState().openPipeline("tpl"));
+    await act(() => useEditStore.getState().openPipeline("tpl2"));
+    await waitFor(() => expect(screen.queryByTestId("dashboard")).not.toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+    await screen.findByTestId("dashboard");
+
+    // A neighbour is promoted programmatically — not a user opening a tab.
+    act(() => useEditStore.getState().closeTab("tpl2"));
+    expect(useEditStore.getState().activeTabId).toBe("tpl");
+    expect(screen.getByTestId("dashboard")).toBeInTheDocument();
+    expect(screen.getByTestId("center-editor")).not.toBeVisible();
   }, 20_000);
 
   it("editor shortcuts do not reach the hidden canvas", async () => {

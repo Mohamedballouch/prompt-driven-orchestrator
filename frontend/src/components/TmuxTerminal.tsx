@@ -110,6 +110,10 @@ const REAPED_STATUSES = new Set(["completed", "failed", "stopped", "stale"]);
 /** Left breathing room for the grid, in px (#911). */
 const TERMINAL_INSET_PX = 4;
 
+/** UI05: below this width or height (px) the container is folded away, not a
+ *  terminal size — a couple of cells at most. No fit, no pty resize. */
+const MIN_FIT_PX = 32;
+
 const TERMINAL_TYPOGRAPHY_RESET = {
   letterSpacing: "normal",
   fontFeatureSettings: "normal",
@@ -447,7 +451,15 @@ export default function TmuxTerminal({
     // resize corrupts (see `altBufferResize.ts`); the helper resets it first and
     // runs the resize once xterm has processed the reset. A frozen pane has no
     // alternate screen to reset, and nothing to redraw it — plain fit.
+    //
+    // UI05: a container folded to (almost) nothing — the right pane collapsed
+    // under the Dashboard — has no grid worth sending: FitAddon would propose its
+    // 2×1 floor and tmux would reflow the session to it. While the observer says
+    // so, nothing is fitted or sent; the grid is re-fitted when the container
+    // grows back. Unknown (no observation yet) counts as usable.
+    let tooSmall = false;
     const layout = () => {
+      if (tooSmall) return;
       const current = roleRef.current;
       if (current.role === "spectator") {
         const pilot = current.pilot;
@@ -552,7 +564,7 @@ export default function TmuxTerminal({
       setDropped(false);
       setDrops(0);
       armSilence();
-      sendResize(ws, fitAddon.proposeDimensions());
+      if (!tooSmall) sendResize(ws, fitAddon.proposeDimensions());
     });
 
     ws?.addEventListener("message", (event) => {
@@ -621,7 +633,11 @@ export default function TmuxTerminal({
       capture: true,
     });
 
-    const resizeObserver = new ResizeObserver(layout);
+    const resizeObserver = new ResizeObserver((entries) => {
+      const box = entries[entries.length - 1]?.contentRect;
+      tooSmall = box !== undefined && (box.width < MIN_FIT_PX || box.height < MIN_FIT_PX);
+      layout();
+    });
     resizeObserver.observe(container);
 
     return () => {

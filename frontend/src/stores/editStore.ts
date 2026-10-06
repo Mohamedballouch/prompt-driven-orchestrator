@@ -172,6 +172,12 @@ interface EditState {
   // tab under a new id, not a tab switch — the right-pane router reads it so a
   // Save that renames the pipeline keeps Pipeline info open (#948).
   lastRekey: { from: string; to: string } | null;
+  // UI05: bumped by every USER open/focus of a tab — `openPipeline`,
+  // `openRunPipeline`, `setActiveTab`, a confirmed single-tab replace — even when
+  // the tab already is the active one. App leaves the Dashboard when it moves.
+  // Programmatic activations (closing or deleting the active tab promotes a
+  // neighbour, a rename rekeys) never bump it.
+  activationSeq: number;
 
   // Single-tab mode (#342): at most one pipeline/run tab. A per-client UI pref
   // (localStorage, NOT instance_config) seeded once at store creation. When on,
@@ -428,6 +434,7 @@ function replaceWithTab(
     selection: { kind: "none", id: null },
     history,
     pendingSingleTab: null,
+    activationSeq: state.activationSeq + 1,
   };
 }
 
@@ -443,6 +450,7 @@ function placeOpenedTab(state: EditState, tab: OpenPipeline): Partial<EditState>
       openTabs: [...state.openTabs, tab],
       activeTabId: tab.id,
       selection: { kind: "none", id: null },
+      activationSeq: state.activationSeq + 1,
     };
   }
   const victims = state.openTabs.filter((t) => t.id !== tab.id);
@@ -522,6 +530,7 @@ export const useEditStore = create<EditState>((set, get) => ({
   lastSavedAt: {},
   history: {},
   lastRekey: null,
+  activationSeq: 0,
   singleTabMode: loadTabsDisabled(),
   pendingSingleTab: null,
 
@@ -537,7 +546,11 @@ export const useEditStore = create<EditState>((set, get) => ({
   openPipeline: async (id: string, scope?: PipelineScope) => {
     const existing = get().openTabs.find((t) => t.id === id);
     if (existing) {
-      set({ activeTabId: id, selection: { kind: "none", id: null } });
+      set((s) => ({
+        activeTabId: id,
+        selection: { kind: "none", id: null },
+        activationSeq: s.activationSeq + 1,
+      }));
       return;
     }
     try {
@@ -567,7 +580,11 @@ export const useEditStore = create<EditState>((set, get) => ({
     const tabId = `__run__${runId}`;
     const existing = get().openTabs.find((t) => t.id === tabId);
     if (existing) {
-      set({ activeTabId: tabId, selection: { kind: "none", id: null } });
+      set((s) => ({
+        activeTabId: tabId,
+        selection: { kind: "none", id: null },
+        activationSeq: s.activationSeq + 1,
+      }));
       return;
     }
     try {
@@ -674,7 +691,11 @@ export const useEditStore = create<EditState>((set, get) => ({
   cancelPendingSingleTab: () => set({ pendingSingleTab: null }),
 
   setActiveTab: (id: string) => {
-    set({ activeTabId: id, selection: { kind: "none", id: null } });
+    set((s) => ({
+      activeTabId: id,
+      selection: { kind: "none", id: null },
+      activationSeq: s.activationSeq + 1,
+    }));
   },
 
   setSelection: (sel: Selection) => {

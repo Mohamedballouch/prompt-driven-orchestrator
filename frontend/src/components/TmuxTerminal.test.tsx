@@ -367,6 +367,49 @@ describe("TmuxTerminal", () => {
     expect(resizeMsgs).toHaveLength(0);
   });
 
+  // UI05: the right pane folds to 0 px while the Dashboard is on screen. FitAddon
+  // then proposes its 2×1 floor, which tmux would reflow the live session to. No
+  // resize leaves while the container is folded; the real grid does once it grows back.
+  it("sends no pty resize while its container is folded to zero, and re-fits when it grows back", async () => {
+    const realObserver = globalThis.ResizeObserver;
+    const observer: { callback: ResizeObserverCallback | null } = { callback: null };
+    globalThis.ResizeObserver = class {
+      constructor(callback: ResizeObserverCallback) {
+        observer.callback = callback;
+      }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    } as unknown as typeof ResizeObserver;
+    try {
+      render(<TmuxTerminal session="pdo-run1-impl-iter-1" />);
+      await new Promise((r) => setTimeout(r, 10));
+      const ws = wsInstances[0];
+      const resizes = () =>
+        ws.sent.filter((s): s is string => typeof s === "string" && s.includes("\"resize\""));
+      const sentBefore = resizes().length;
+      const observe = (width: number, height: number) =>
+        act(() => {
+          observer.callback!(
+            [{ contentRect: { width, height } }] as unknown as ResizeObserverEntry[],
+            {} as ResizeObserver,
+          );
+        });
+
+      // What FitAddon proposes for a 0-px-wide container: its floor.
+      proposeDimensionsImpl.current = () => ({ cols: 2, rows: 1 });
+      observe(0, 400);
+      expect(resizes()).toHaveLength(sentBefore);
+
+      proposeDimensionsImpl.current = () => ({ cols: 120, rows: 40 });
+      observe(900, 400);
+      expect(resizes()).toHaveLength(sentBefore + 1);
+      expect(JSON.parse(resizes().at(-1)!)).toEqual({ type: "resize", cols: 120, rows: 40 });
+    } finally {
+      globalThis.ResizeObserver = realObserver;
+    }
+  });
+
   it("initializes xterm.js Terminal with correct theme", () => {
     render(<TmuxTerminal session="test-session" />);
     expect(mockTerminalCalls.length).toBe(1);

@@ -388,14 +388,18 @@ export default function App() {
   // inspector reads, never writes — Config instead of Edit.
   const runLocked = isRunTabLocked(editTab);
   const hasEditTab = editTab != null;
-  // UI05: activating another tab (a pipeline opened from the library, a run tab)
-  // leaves the Dashboard; the first render's id is not a navigation. Adjusted
-  // during render from the previous id (not in an effect), so no frame of the
-  // Dashboard is painted over the tab that was just opened.
-  const [seenActiveTabId, setSeenActiveTabId] = useState(editActiveTabId);
-  if (editActiveTabId !== seenActiveTabId) {
-    setSeenActiveTabId(editActiveTabId);
-    if (editActiveTabId) setDashboardOpen(false);
+  // UI05: a user opening or focusing a tab (a pipeline from the library or a
+  // Trigger, a run tab) leaves the Dashboard — even when that tab already is the
+  // active one behind it. The store counts those gestures (`activationSeq`);
+  // closing or deleting the active tab promotes a neighbour without counting, so
+  // it keeps the Dashboard. Seeded with the mount value (the first render is not
+  // a navigation) and adjusted during render, not in an effect, so no frame of
+  // the Dashboard is painted over the tab that was just opened.
+  const activationSeq = useEditStore((s) => s.activationSeq);
+  const [seenActivationSeq, setSeenActivationSeq] = useState(activationSeq);
+  if (activationSeq !== seenActivationSeq) {
+    setSeenActivationSeq(activationSeq);
+    setDashboardOpen(false);
   }
   const dashboardVisible = !hasEditTab || dashboardOpen;
   // #684: which pane a selected node gets. Markers (start/end) never reach the
@@ -910,10 +914,15 @@ export default function App() {
   // collapse lands. Expanding resizes to the PERSISTED width, not
   // the library's in-memory one, so it also holds after a reload; the persisted
   // width itself never records the collapse (useResizableLayout).
+  // UI05: the pane also folds away while the Dashboard is on screen — it belongs to
+  // the hidden tab. Collapsed, not unmounted: its terminals keep their sessions, and
+  // it comes back at the persisted width on « Back to editor » or opening a Run.
+  // The router's own `rightPaneCollapsed` still feeds what it fed (EditCanvas).
+  const rightPaneHidden = rightPaneCollapsed || dashboardVisible;
   const rightPanelRef = usePanelRef();
-  const rightCollapsedRef = useRef(rightPaneCollapsed);
-  rightCollapsedRef.current = rightPaneCollapsed;
-  const [rightCollapsible, setRightCollapsible] = useState(rightPaneCollapsed);
+  const rightCollapsedRef = useRef(rightPaneHidden);
+  rightCollapsedRef.current = rightPaneHidden;
+  const [rightCollapsible, setRightCollapsible] = useState(rightPaneHidden);
   const { persistedSize, onLayoutChanged: persistLayout } = layout;
   const syncRightPane = useCallback(
     function sync(attempt = 0) {
@@ -938,7 +947,7 @@ export default function App() {
     [rightPanelRef, persistedSize],
   );
   useLayoutEffect(() => {
-    if (rightPaneCollapsed) {
+    if (rightPaneHidden) {
       // No-op until the collapsible constraint lands — syncRightPane retries.
       setRightCollapsible(true);
       syncRightPane();
@@ -948,7 +957,7 @@ export default function App() {
       syncRightPane();
       setRightCollapsible(false);
     }
-  }, [rightPaneCollapsed, syncRightPane]);
+  }, [rightPaneHidden, syncRightPane]);
   const conflictTab = openTabs.find((t) => t.conflict != null);
   const saveErrorTab = openTabs.find((t) => t.saveError != null);
 
@@ -958,6 +967,8 @@ export default function App() {
 
   const handleViewYaml = useCallback(() => {
     if (!saveErrorTab) return;
+    // UI05: the YAML panel belongs to the editor — leave the Dashboard for it.
+    setDashboardOpen(false);
     setInfoPanelTab("yaml");
     setInfoPanelScrollToLine(saveErrorTab.saveError?.line);
     setInfoPanelOpen(true);
@@ -1065,8 +1076,8 @@ export default function App() {
               rect, which breaks the library's hit regions for the OTHER handle. */}
           <ResizableHandle
             id="right-pane-handle"
-            disabled={rightPaneCollapsed}
-            className={rightPaneCollapsed ? "invisible" : undefined}
+            disabled={rightPaneHidden}
+            className={rightPaneHidden ? "invisible" : undefined}
           />
 
           <ResizablePanel
@@ -1076,7 +1087,7 @@ export default function App() {
             panelRef={rightPanelRef}
             id="right"
             className="panel-r"
-            data-collapsed={rightPaneCollapsed || undefined}
+            data-collapsed={rightPaneHidden || undefined}
           >
             {paneOwner === "trigger" && selectedTrigger ? (
               <TriggerDetailPanel

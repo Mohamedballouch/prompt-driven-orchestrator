@@ -1,4 +1,4 @@
-import { render, screen, within, waitFor } from "@testing-library/react";
+import { act, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardSummary, StatsCost, WsMessage } from "../types";
@@ -107,7 +107,11 @@ describe("Dashboard (UI05)", () => {
     const { onOpenRun } = setup();
     const row = await screen.findByTestId("dashboard-result");
     expect(row).toHaveTextContent("2 review comments pending");
-    expect(within(row).getByRole("link", { name: "Review changes" })).toHaveAttribute("href", "/runs/r-done/review");
+    const review = within(row).getByRole("link", { name: "Review changes" });
+    expect(review).toHaveAttribute("href", "/runs/r-done/review");
+    // A new browser tab: the editor tabs hidden under the Dashboard keep their unsaved edits.
+    expect(review).toHaveAttribute("target", "_blank");
+    expect(review).toHaveAttribute("rel", expect.stringContaining("noopener"));
     await userEvent.click(within(row).getByRole("button", { name: "Open result" }));
     expect(onOpenRun).toHaveBeenCalledWith("r-done", null);
   });
@@ -127,9 +131,80 @@ describe("Dashboard (UI05)", () => {
     await waitFor(() => expect(screen.getByTestId("dashboard-card-spend")).toHaveTextContent("~$12.50"));
   });
 
-  it("announces a disconnected daemon", async () => {
-    setup({ connection: "reconnecting" });
+  it("announces a daemon that dropped after being connected", async () => {
+    const handlers = { onOpenRun: vi.fn(), onStartRun: vi.fn(), onOpenStats: vi.fn() };
+    const { rerender } = render(<Dashboard connection="connected" subscribe={NO_SOCKET} {...handlers} />);
+    await screen.findByTestId("dashboard-card-completed");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    rerender(<Dashboard connection="reconnecting" subscribe={NO_SOCKET} {...handlers} />);
     expect(await screen.findByRole("status")).toHaveTextContent(/daemon.*(disconnected|reconnecting)/i);
+  });
+
+  it("gives a socket that never connected a grace before announcing it", async () => {
+    // The socket starts « disconnected » on every fresh load, before its first open.
+    vi.useFakeTimers();
+    try {
+      setup({ connection: "disconnected" });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_900);
+      });
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(screen.getByRole("status")).toHaveTextContent(/daemon disconnected/i);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the stale warning up while a retry is in flight", async () => {
+    vi.mocked(fetchDashboard)
+      .mockReset()
+      .mockResolvedValueOnce(summary())
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockReturnValueOnce(new Promise(() => {}));
+    setup();
+    await screen.findByTestId("dashboard-card-completed");
+    await userEvent.click(screen.getByRole("button", { name: "Refresh dashboard" }));
+    expect(await screen.findByText(/refresh failed/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Refresh dashboard" }));
+    expect(screen.getByText("Refreshing…")).toBeInTheDocument();
+    expect(screen.getByText(/refresh failed/)).toBeInTheDocument();
+  });
+
+  it("titles an unnamed Run by its Pipeline and tells it apart by a short id", async () => {
+    const base = summary();
+    vi.mocked(fetchDashboard).mockReset().mockResolvedValue(summary({
+      active: [{ ...base.active[0], run_id: "20330402-090000-abc1234", run_name: null }],
+      recent_results: [{ ...base.recent_results[0], run_id: "20330401-080000-def5678", run_name: null }],
+    }));
+    setup();
+    const active = await screen.findByTestId("dashboard-active-run");
+    expect(active.textContent?.match(/impl/g)).toHaveLength(1);
+    expect(active).toHaveTextContent("abc1234");
+    const result = screen.getByTestId("dashboard-result");
+    expect(result.textContent?.match(/impl/g)).toHaveLength(1);
+    expect(result).toHaveTextContent("def5678");
+  });
+
+  it("says which lists the period does not narrow", async () => {
+    setup();
+    await screen.findByTestId("dashboard-card-completed");
+    expect(screen.getByTestId("dashboard")).toHaveTextContent("Live now items ignore the period");
+    expect(screen.getByRole("region", { name: "Needs attention" })).toHaveTextContent(
+      "Live now · failures from the last 7 days",
+    );
+    expect(screen.getByRole("region", { name: "Recent results" })).toHaveTextContent("Latest 8 · any date");
+  });
+
+  it("names the row each repeated action belongs to", async () => {
+    setup();
+    const result = await screen.findByTestId("dashboard-result");
+    expect(within(result).getByRole("button", { name: "Open result" })).toHaveAccessibleDescription("Add search");
+    expect(within(result).getByRole("link", { name: "Review changes" })).toHaveAccessibleDescription("Add search");
+    const item = screen.getByTestId("dashboard-attention-item");
+    expect(within(item).getByRole("button", { name: "Open Fix login" })).toHaveAccessibleDescription("Fix login");
   });
 
   it("shows an empty instance plainly, with — instead of zeros", async () => {
@@ -149,8 +224,12 @@ describe("Dashboard (UI05)", () => {
     expect(screen.getByText("No runs in progress.")).toBeInTheDocument();
     expect(screen.getByText("No completed runs yet.")).toBeInTheDocument();
     expect(screen.getByTestId("dashboard-card-completed")).toHaveTextContent("—");
+    // One « — » for the whole figure, not a « — » count beside a « — » rate.
+    expect(screen.getByTestId("dashboard-card-completed").textContent?.match(/—/g)).toHaveLength(1);
     expect(screen.getByTestId("dashboard-card-duration")).toHaveTextContent("—");
     expect(screen.getByTestId("dashboard-card-spend")).not.toHaveTextContent("$0");
+    // No recorded spend: the axis names no maximum.
+    expect(within(screen.getByTestId("dashboard-spend-trend")).queryByText("—")).not.toBeInTheDocument();
   });
 
   it("starts a run from a button whose name never collides with New Run", async () => {
@@ -169,5 +248,23 @@ describe("Dashboard (UI05)", () => {
     expect(days.length).toBe(30);
     expect(days[0]).toHaveAttribute("data-state", "outside");
     expect(days[0]).toHaveAttribute("title", expect.stringMatching(/before the first recorded run/i));
+  });
+
+  it("marks a day whose Runs have no known cost as unknown", async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    vi.mocked(fetchStatsCost).mockReset().mockResolvedValue({
+      ...COST,
+      by_period: [{
+        ...COST.total, bucket: today, usd: null, partial: false, executions: 2, readable: 0, unknown: 2,
+        coverage: { complete: 0, partial: 0, unavailable: 2 },
+      }],
+    } as StatsCost);
+    setup();
+    await waitFor(() =>
+      expect(screen.getAllByTestId("dashboard-spend-day").some((d) => d.dataset.state === "unknown")).toBe(true),
+    );
+    const unknown = screen.getAllByTestId("dashboard-spend-day").filter((d) => d.dataset.state === "unknown");
+    expect(unknown).toHaveLength(1);
+    expect(unknown[0]).toHaveAttribute("title", `${today}: cost unknown · 2 Runs`);
   });
 });
