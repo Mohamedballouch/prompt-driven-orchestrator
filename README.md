@@ -222,6 +222,8 @@ Updating, service options and every CLI command: [docs/reference/cli.md](docs/re
 
 Want to contribute or run PDO from source? See [CONTRIBUTING.md](CONTRIBUTING.md). Reference docs (CLI, reverse proxy, terminal, harness support) live in [docs/reference/](docs/reference/).
 
+Planned improvements in this fork: [Dashboard and analytics implementation plan](docs/plans/dashboard-and-analytics.md), with concept images, live review screenshots, delivery phases, and acceptance criteria.
+
 ## License
 
 PDO is free and open source under the [MIT License](LICENSE): use it, modify it, embed it, host it, for any purpose.

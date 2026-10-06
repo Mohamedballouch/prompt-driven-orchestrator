@@ -1,0 +1,34 @@
+PDO UI concept prompts
+Created: 6 October 2026
+Method: built-in image generation
+Purpose: visual proposals only; not implemented interfaces. Sample data is illustrative, not live telemetry.
+Fork: https://github.com/Mohamedballouch/prompt-driven-orchestrator
+Verified main: 5c8a6295967f7af824aeace31c8eb1ea72033d9c (v1.119.1 merge)
+Previous live UI audit: v1.110.0
+
+CONCEPT: dashboard-concept
+
+Use case: ui-mockup.
+Create a polished, high-fidelity desktop application screenshot concept for PDO, Prompt Driven Orchestrator, an existing visual orchestrator for AI coding agents. This is a proposed dashboard redesign, not a marketing website. Show ONE complete screen, straight on, filling the image, landscape 16:10 at high resolution. No laptop, no perspective, no browser chrome, no photographic decoration.
+Visual system: restrained professional engineering application, charcoal background #10151B, slightly lighter slate surfaces #1B232D, thin borders #2C3744, clear white primary text and readable gray secondary text. Emerald #26D7A0 primary accent, amber for pending actions, muted blue for running. Modern clean sans serif, large readable 15–16px equivalent body, tabular figures, generous 24px spacing, crisp minimal line icons. Avoid excessive nested cards, glow, gradients, tiny text and excessive empty space.
+Left navigation about 185px wide: small green geometric mark and PDO, then Dashboard (selected), Runs, Pipelines, Analytics, Templates. Bottom: Settings and green-dot Connected.
+Header main area: "Dashboard", subtitle "Your agents, work and outcomes", filters "All projects" and "Last 30 days", emerald "+ New run". A conspicuous small pill "DESIGN CONCEPT · SAMPLE DATA" must be present.
+First row of five compact balanced metric cards: "Recorded spend" "$77.28" "Estimated · partial coverage"; "Completed runs" "18" "of 24 started"; "Median completion" "12m 40s" "Completed runs"; "Active runs" "3" "6 agent sessions"; "Needs attention" "2" "1 approval · 1 blocked". These are illustrative values, not live data.
+Second row two columns: left about 60% is "Needs your attention" with two clear actionable rows, amber "Approval required" / "Invoice workflow" / "Review changes" button, and orange "Blocked" / "Repository access" / "Inspect run" button. Right 40% is "Recorded spend over time", a clean emerald daily bar chart with date tick labels and y-axis "$", caption "Known costs only".
+Below: a wide "Active runs" table with columns Run, Pipeline, Current step, Elapsed, Recorded cost, Status. Three rows: "Improve invoice review" / "Build & review" / "Reviewing code" / "08m 24s" / "$2.10" / blue Running; "Add export filters" / "Implementation" / "Implementing" / "05m 12s" / "$1.38" / blue Running; "Reconcile invoice totals" / "Validation" / "Awaiting approval" / "14m 08s" / "$0.84" / amber Waiting. Use human-readable task names.
+Bottom two compact panels: "Insights" with "Loop workflow accounts for 46.5% of recorded spend" and a "View breakdown" link; "Recent results" with completed output names and "Review output" actions. Compose everything comfortably within the single screenshot. Text must be crisp and correctly spelled. Professional coherent UI ready to discuss with a product team.
+
+===============================
+
+CONCEPT: analytics-concept
+
+Use case: ui-mockup.
+Create a polished, high-fidelity desktop application screenshot concept for PDO, Prompt Driven Orchestrator. Show ONE complete COST AND PERFORMANCE ANALYTICS page, landscape 16:10 high resolution, straight on and edge-to-edge, no monitor or browser chrome. This is a product screenshot proposal, not a marketing page.
+Use a restrained professional engineering application visual system: charcoal #10151B base, slate #1B232D surfaces, fine #2C3744 borders, near-white text with clearly readable secondary labels, emerald #26D7A0 accent, amber for incomplete data, muted blue secondary series. Modern sans serif and tabular metrics, minimum comfortable body type, generous spacing, disciplined alignment. Avoid neon glow, gradients, microscopic labels, clutter.
+185px left rail: green geometric PDO mark, Dashboard, Runs, Pipelines, Analytics (selected), Templates. Settings and green-dot Connected at bottom.
+Main header "Cost & performance", subtitle "Understand what work costs — and what it delivers". Filter bar with "All projects", "Last 30 days", "All run statuses" and "Compare period". Clearly visible "DESIGN CONCEPT · SAMPLE DATA" pill.
+A slim amber information strip: "Cost coverage is incomplete" and "Known usage is included. Some agent and infrastructure costs are missing." right-aligned "Inspect coverage".
+Four large metrics in a row: "Recorded spend" "$77.28" "Estimated, not invoiced"; "Median cost / execution" "$0.36" "123 measured executions"; "Median active time" "1m 40s" "Successful executions"; "Human guidance" "12%" "5 of 41 executions". These are sample values; definitions and populations are explicitly different and shown underneath.
+Central two-column charts: left 60% "Spend by workflow", a clean horizontal bar chart with workflow labels and dollar values: "Build · loop" "$35.90", "UI enhancement" "$11.75", "Build" "$9.30", "Discovery" "$8.38", "Other" "$11.95". Emerald bars with thin separators, largest subtly highlighted. Right 40% "Where time goes", readable stacked horizontal bars for "Implementation", "Review", "Approval", with legend "Active", "Waiting for you", "Queued", distinct emerald amber slate-blue. Sample chart; all labels legible, no overlapping.
+Bottom "Workflow comparison" table, columns Workflow, Completed / started, Recorded spend, Median completion, Retry share, Coverage. Rows "Build · loop" / "3 / 5" / "$35.90" / "18m 20s" / "32%" / amber Partial; "UI enhancement" / "2 / 2" / "$11.75" / "15m 10s" / "8%" / amber Partial; "Build" / "4 / 5" / "$9.30" / "09m 40s" / "12%" / green Complete; "Discovery" / "1 / 2" / "$8.38" / "11m 25s" / "0%" / amber Partial.
+Small bottom observation banner: "Investigate loop retries first" and "46.5% of recorded spend comes from the loop workflow." Button "Open contributing runs". All fictional table/queue figures are illustrative and screen is labeled as sample data. Convey trustworthy analytics: clear units, denominators, cost coverage and actionable drill-downs. Keep all content comfortably visible within the screenshot with no cut-off text.
