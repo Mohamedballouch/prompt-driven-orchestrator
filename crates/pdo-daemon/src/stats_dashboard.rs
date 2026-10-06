@@ -16,6 +16,8 @@ use serde::{Deserialize, Serialize};
 use crate::event_log::{NodeStatus, RunState, RunStatus};
 use crate::AppState;
 
+/// An orchestrator Node parked on its child Runs: working, not waiting on a human.
+const AWAITING_CAUSE_CHILDREN_PENDING: &str = "children_pending";
 pub(crate) const ATTENTION_LIMIT: usize = 20;
 pub(crate) const ACTIVE_LIMIT: usize = 10;
 pub(crate) const RECENT_LIMIT: usize = 8;
@@ -159,6 +161,9 @@ pub(crate) struct DashboardRun {
     pub project_name: String,
     /// The timestamp of the Run's last event — the age of an incident wait.
     pub last_event_ts: Option<String>,
+    /// The child overlay lifted this Run to `awaiting_user` only because a child
+    /// Run awaits: the child is the attention item, not this Run.
+    pub lifted_by_child: bool,
 }
 
 fn millis_between(start: &str, end: &str) -> Option<i64> {
@@ -198,6 +203,9 @@ fn attention_of(run: &DashboardRun, failed_cutoff: &str) -> Option<DashboardAtte
     };
     match state.status {
         RunStatus::AwaitingUser => {
+            if run.lifted_by_child {
+                return None;
+            }
             let mut awaiting: Vec<(&String, &crate::event_log::AwaitingInfo)> = state
                 .nodes
                 .iter()
@@ -206,7 +214,17 @@ fn attention_of(run: &DashboardRun, failed_cutoff: &str) -> Option<DashboardAtte
                 .collect();
             awaiting.sort_by(|a, b| a.1.since.cmp(&b.1.since).then_with(|| a.0.cmp(b.0)));
             if state.awaiting_reason_code.is_some() {
-                let node = awaiting.first().map(|(id, _)| (*id).clone());
+                let node = awaiting.first().map(|(id, _)| (*id).clone()).or_else(|| {
+                    // A node-level incident: the earliest Interrupted Node.
+                    let mut interrupted: Vec<(&Option<String>, &String)> = state
+                        .nodes
+                        .iter()
+                        .filter(|(_, node)| node.status == NodeStatus::Interrupted)
+                        .map(|(id, node)| (&node.started_at, id))
+                        .collect();
+                    interrupted.sort();
+                    interrupted.first().map(|(_, id)| (*id).clone())
+                });
                 return Some(item(
                     AttentionKind::Blocked,
                     node,
@@ -216,7 +234,10 @@ fn attention_of(run: &DashboardRun, failed_cutoff: &str) -> Option<DashboardAtte
             }
             let own: Vec<_> = awaiting
                 .iter()
-                .filter(|(_, info)| info.cause != crate::event_log::AWAITING_CAUSE_CHILD_AWAITING)
+                .filter(|(_, info)| {
+                    info.cause != crate::event_log::AWAITING_CAUSE_CHILD_AWAITING
+                        && info.cause != AWAITING_CAUSE_CHILDREN_PENDING
+                })
                 .collect();
             if own.is_empty() && !awaiting.is_empty() {
                 // Lifted only by an awaiting child: the child is the item.
@@ -242,16 +263,17 @@ fn attention_of(run: &DashboardRun, failed_cutoff: &str) -> Option<DashboardAtte
             if failed_at.as_str() < failed_cutoff {
                 return None;
             }
-            let mut failed_nodes: Vec<&String> = state
+            // The chronologically first failed Node (completion time, none last).
+            let mut failed_nodes: Vec<(bool, &Option<String>, &String)> = state
                 .nodes
                 .iter()
                 .filter(|(_, node)| node.status == NodeStatus::Failed)
-                .map(|(id, _)| id)
+                .map(|(id, node)| (node.completed_at.is_none(), &node.completed_at, id))
                 .collect();
             failed_nodes.sort();
             Some(item(
                 AttentionKind::Failed,
-                failed_nodes.first().map(|id| (*id).clone()),
+                failed_nodes.first().map(|(_, _, id)| (*id).clone()),
                 state.failure_reason.clone(),
                 Some(failed_at),
             ))
@@ -488,17 +510,25 @@ pub(crate) async fn stats_dashboard(
         }
     }
     // #588 / ADR-0069 §4: the same child overlay as `GET /runs`.
+    let before_overlay: Vec<bool> =
+        states.iter().map(|s| s.status == RunStatus::AwaitingUser).collect();
     crate::child_awaiting::overlay(&mut states);
+    let lifted: Vec<bool> = states
+        .iter()
+        .zip(before_overlay)
+        .map(|(s, before)| !before && s.status == RunStatus::AwaitingUser)
+        .collect();
 
     let runs: Vec<DashboardRun> = states
         .into_iter()
         .zip(last_event_ts)
-        .map(|(run_state, last)| {
+        .zip(lifted)
+        .map(|((run_state, last), lifted_by_child)| {
             let (project_id, project_name) = crate::stats::project_identity_for_root(
                 &crate::effective_repo_root(&state, &run_state),
                 &stored_projects,
             );
-            DashboardRun { state: run_state, project_id, project_name, last_event_ts: last }
+            DashboardRun { state: run_state, project_id, project_name, last_event_ts: last, lifted_by_child }
         })
         .collect();
 
@@ -513,8 +543,8 @@ pub(crate) async fn stats_dashboard(
         };
         if let Some(cost) = crate::derive_run_cost(&state, &run.state, events) {
             let uncosted = !cost.uncosted_harnesses.is_empty();
-            active.cost_usd = (!(uncosted && cost.usd == 0.0)).then_some(cost.usd);
-            active.cost_partial = cost.partial || uncosted;
+            active.cost_usd = if uncosted { None } else { Some(cost.usd) };
+            active.cost_partial = cost.partial;
         }
     }
 
@@ -562,6 +592,7 @@ mod tests {
             project_id: project.into(),
             project_name: project.into(),
             last_event_ts,
+            lifted_by_child: false,
         }
     }
 
@@ -711,5 +742,59 @@ mod tests {
         assert_eq!(names, vec!["Review", "Worker"]);
         assert_eq!(summary.live.running, 2);
         assert_eq!(summary.active[0].cost_usd, None);
+    }
+
+    #[test]
+    fn a_parent_lifted_only_by_its_child_is_not_listed_but_stays_live() {
+        let mut parent = dash("repo", vec![started("parent", "2033-04-02T09:00:00.000Z")]);
+        parent.state.status = RunStatus::AwaitingUser;
+        parent.lifted_by_child = true;
+        let child = dash("repo", vec![
+            started("child", "2033-04-02T09:00:00.000Z"),
+            ev("child", "2033-04-02T09:01:00.000Z", EventKind::NodeStarted, Some("worker"), None),
+            ev("child", "2033-04-02T09:02:00.000Z", EventKind::NodeAwaitingUser, Some("worker"),
+               Some(serde_json::json!({"cause": "declared", "message": "Which layout?"}))),
+        ]);
+        let summary = fold_dashboard(&[parent, child], FROM, TO, None, now());
+        assert_eq!(summary.attention.iter().map(|i| i.run_id.as_str()).collect::<Vec<_>>(), vec!["child"]);
+        assert_eq!(summary.live.awaiting_user, 2);
+        assert_eq!(summary.active_total, 2);
+    }
+
+    #[test]
+    fn an_orchestrator_waiting_on_its_children_is_working_not_waiting_on_a_human() {
+        let orchestrator = |extra: bool| {
+            let mut events = vec![
+                started("orch", "2033-04-02T09:00:00.000Z"),
+                ev("orch", "2033-04-02T09:01:00.000Z", EventKind::NodeStarted, Some("worker"), None),
+                ev("orch", "2033-04-02T09:02:00.000Z", EventKind::NodeAwaitingUser, Some("worker"),
+                   Some(serde_json::json!({"cause": "children_pending"}))),
+            ];
+            if extra {
+                events.push(ev("orch", "2033-04-02T09:03:00.000Z", EventKind::NodeStarted, Some("review"), None));
+                events.push(ev("orch", "2033-04-02T09:04:00.000Z", EventKind::NodeAwaitingUser, Some("review"),
+                               Some(serde_json::json!({"cause": "declared", "message": "Approve?"}))));
+            }
+            dash("repo", events)
+        };
+        let summary = fold_dashboard(&[orchestrator(false)], FROM, TO, None, now());
+        assert_eq!(summary.attention_total, 0);
+        let summary = fold_dashboard(&[orchestrator(true)], FROM, TO, None, now());
+        assert_eq!(summary.attention_total, 1);
+        assert_eq!(summary.attention[0].kind, AttentionKind::WaitingForUser);
+        assert_eq!(summary.attention[0].node_id.as_deref(), Some("review"));
+    }
+
+    #[test]
+    fn a_live_run_started_before_the_period_is_still_live_and_active() {
+        let runs = vec![dash("repo", vec![
+            started("old", "2033-03-01T09:00:00.000Z"),
+            ev("old", "2033-03-01T09:01:00.000Z", EventKind::NodeStarted, Some("worker"), None),
+        ])];
+        let summary = fold_dashboard(&runs, FROM, TO, None, now());
+        assert_eq!(summary.cohort.started, 0);
+        assert_eq!(summary.live.running, 1);
+        assert_eq!(summary.active_total, 1);
+        assert_eq!(summary.active[0].run_id, "old");
     }
 }

@@ -82,6 +82,7 @@ For a Run, the contributions are its Node executions, its Infrastructure contrib
 ### Attention rules
 
 - *waiting for you*: a live Run in `awaiting_user` without an incident code. Its Node is the earliest-declared awaiting Node; the reason is that Node's question, else the Run's awaiting reason; the age runs from the declaration. A Run awaiting only because a child Run awaits (`child_awaiting`) is not listed: the child is.
+- An orchestrator Node waiting for its child Runs (`children_pending`) is working, not waiting on a human: it is not an attention item; its children's waits and failures are.
 - *blocked*: a live Run in `awaiting_user` with an incident code (`session_died`, `run_stalled`, `merge_conflict`, …). The reason is the Run's awaiting reason; the age runs from the Run's last event.
 - *failed*: a Run failed within the last 7 days. Its Node is the first failed Node; the reason is the Run's failure reason; the age runs from the failure.
 - Archived Runs are never attention items.
