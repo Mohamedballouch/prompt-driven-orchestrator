@@ -138,7 +138,7 @@ function CohortLine({
   return (
     <div
       data-testid="stats-cohort-line"
-      className={completedOnly ? "text-st-await" : "text-fg-4"}
+      className={completedOnly ? "text-st-await" : "text-fg-3"}
       style={{ fontSize: "10.5px" }}
     >
       Cohort: runs started in the period
@@ -858,7 +858,7 @@ function CostCell({ metric }: { metric: StatsHarnessCost | undefined }) {
         <button
           type="button"
           aria-label={detail}
-          className="text-fg-4 underline decoration-dotted underline-offset-2"
+          className="text-fg-3 underline decoration-dotted underline-offset-2"
           style={{ fontSize: "9.5px" }}
         >
           {metric.median_usd === null
@@ -1009,7 +1009,7 @@ function Breadcrumb({
 }) {
   return (
     <div
-      className="mb-3 text-fg-4"
+      className="mb-3 text-fg-3"
       style={{ fontSize: "10.5px" }}
       data-testid={testid}
     >
@@ -1546,7 +1546,7 @@ function CostTab({
         data-testid="stats-drilldown-navigation"
       >
         <div className="mb-2 flex items-center justify-between gap-2">
-          <span className="text-fg-4" style={{ fontSize: "10.5px" }}>
+          <span className="text-fg-3" style={{ fontSize: "10.5px" }}>
             Ranked by cost
           </span>
           <select
@@ -1584,7 +1584,7 @@ function CostTab({
           }}
         />
         {axis === "model" && (
-          <div className="mt-3 text-fg-4" style={{ fontSize: "10.5px" }}>
+          <div className="mt-3 text-fg-3" style={{ fontSize: "10.5px" }}>
             Model ids verbatim, one row per id — the same id run through two
             harnesses is one row, one column per harness. Hover a model or an
             effort for where the value was read and its provider.
@@ -3081,7 +3081,7 @@ function CohortOnlyBand({
   return (
     <StatsFilterBand label={label} testid="stats-filter-band">
       <CohortChip checked={completedOnly} onChange={onCompletedOnlyChange} />
-      <span className="text-fg-4">default: all runs</span>
+      <span className="text-fg-3">default: all runs</span>
       {uncombined && (
         <UncombinedChip
           checked={uncombined.checked}

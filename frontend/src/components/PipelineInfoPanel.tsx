@@ -12,7 +12,7 @@ import type { CollapsedFiles } from "../lib/diffTab";
 import type { LibraryPipelineEntry } from "../api";
 import { fetchPipelineDocument, fetchPipelineSkillsSidecar, fetchRunPipelineDocument, fetchRunPipelineSkillsSidecar, openLibraryAssistant, startRunManager, stopRunManager } from "../api";
 import type { RunState, PipelineDef } from "../types";
-import { isLiveRun } from "../types";
+import { isLiveRun, runStatusLabel } from "../types";
 import { shortAge } from "../lib/branchSelect";
 import { formatDuration, useRunDuration } from "../lib/runDuration";
 import { formatEstCost } from "../lib/costLabel";
@@ -697,6 +697,11 @@ function InfoTab({
               {run ? `run ${run.run_id.slice(-8)} · ${pipeline?.version ?? "v1"}` : `template · ${pipeline?.version ?? "v1"}`}
             </div>
           </div>
+          {run && (
+            <span data-testid="info-panel-status" className="shrink-0 text-fg-3" style={{ fontSize: "10.5px" }}>
+              {runStatusLabel(run.status)}
+            </span>
+          )}
           {/* Sandbox badge (#410): shown for any sandboxed Run (full/minimal). An
               `off`/host Run renders nothing — the field is absent on those. */}
           {run?.sandbox && run.sandbox !== "off" && (

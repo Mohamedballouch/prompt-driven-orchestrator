@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { ExternalLink, GitFork } from "lucide-react";
 import type { RunStatus } from "../types";
-import { isLiveRun } from "../types";
+import { isLiveRun, RUN_STATUS_LABEL } from "../types";
 import { formatDuration } from "../lib/runDuration";
 import { formatCostAmount } from "../lib/costLabel";
 import {
@@ -12,17 +12,6 @@ import {
   type RunChildEntry,
   totalChildren,
 } from "../lib/orchestration";
-
-const RUN_STATUS_LABEL: Record<RunStatus, string> = {
-  running: "Running",
-  awaiting_user: "Awaiting user",
-  completed: "Completed",
-  failed: "Failed",
-  skipped: "Skipped",
-  halted: "Halted",
-  paused: "Paused",
-  archived: "Archived",
-};
 
 function runStatusDot(status: RunStatus): string {
   if (status === "failed") return "bg-st-failed";

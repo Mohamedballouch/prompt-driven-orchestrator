@@ -35,7 +35,9 @@
   /* PDO text */
   --color-fg: #e6e8eb;
   --color-fg-2: #aab1bd;
-  --color-fg-3: #767e8c;
+  /* UI03: 5.33:1 on bg-3, 4.72:1 on bg-4 (the Stats and Dashboard panes) — was
+     #767e8c, declared debt at 4.08:1. Still one step below fg-2. */
+  --color-fg-3: #8a92a0;
   --color-fg-4: #525a68;
   --color-fg-5: #383e48;
 

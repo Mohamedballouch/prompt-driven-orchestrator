@@ -98,7 +98,6 @@ const NON_TEXT = [
  * colour, never to make a regression pass.
  */
 const DARK_DEBT: Record<string, number> = {
-  "fg-3": 4.08,
   "fg-4": 2.4,
   "st-failed": 4.44,
   "st-skipped": 3.51,
@@ -145,5 +144,16 @@ describe("dark palette — no regression (#759)", () => {
   it("declares debt only for colours that are actually below AA", () => {
     const nowFine = Object.keys(DARK_DEBT).filter((token) => worstRatio(dark, token) >= AA_TEXT);
     expect(nowFine).toEqual([]);
+  });
+});
+
+describe("informative text on the Stats and Dashboard panes (UI03)", () => {
+  it.each([
+    ["dark", dark],
+    ["light", light],
+  ] as const)("%s: fg, fg-2 and fg-3 hold AA (4.5:1) on bg-4", (_name, palette) => {
+    for (const token of ["fg", "fg-2", "fg-3"]) {
+      expect(contrastRatio(palette[token], palette["bg-4"])).toBeGreaterThanOrEqual(AA_TEXT);
+    }
   });
 });

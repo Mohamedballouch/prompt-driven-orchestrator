@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronRight, Copy, FileUp, Pause, Pencil, Play, Plus, RotateCcw, SquareTerminal, Trash2, X, Zap } from "lucide-react";
-import { isLiveRun, isTerminalRun, type RunListEntry, type RunStatus, type PipelineListEntry, type Trigger, type Project } from "../types";
+import { isLiveRun, isTerminalRun, runStatusLabel, type RunListEntry, type RunStatus, type PipelineListEntry, type Trigger, type Project } from "../types";
 import type { LibraryPipelineEntry } from "../api";
 import { ApiError, cleanupRun, createPipeline, duplicatePipeline, forgetRun, importPipelineDocument, importWorkflow, openRunShell, pauseRun, renameRun, resumeRun, retryAll } from "../api";
 import { announceSkillsChanged } from "../hooks/useSkillBank";
@@ -445,9 +445,13 @@ export default function UnifiedLeftPanel({
             </div>
           )}
           <div
-            className="flex items-center gap-1.5 truncate font-mono text-fg-4"
+            className="flex min-w-0 items-center gap-1.5 truncate font-mono text-fg-4"
             style={{ fontSize: "10px" }}
           >
+            <span data-testid="run-status-label" className="shrink-0 text-fg-3">
+              {runStatusLabel(run.status, run.stalled ?? false)}
+            </span>
+            <span aria-hidden="true" className="text-fg-4">·</span>
             <span className="truncate" data-testid="run-pipeline-name">
               {run.pipeline_name}
             </span>

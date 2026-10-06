@@ -28,6 +28,24 @@ export function isTerminalRun(status: RunStatus): boolean {
   return !isLiveRun(status);
 }
 
+/** The words for a Run status (UI03): a status dot never speaks by colour alone.
+ *  `halted` reads "Stopped" — the user-facing word for a halted Run. */
+export const RUN_STATUS_LABEL: Record<RunStatus, string> = {
+  running: "Running",
+  awaiting_user: "Awaiting user",
+  completed: "Completed",
+  failed: "Failed",
+  skipped: "Skipped",
+  halted: "Stopped",
+  paused: "Paused",
+  archived: "Archived",
+};
+
+/** `RUN_STATUS_LABEL`, with the display-only stalled overlay winning (#UI03). */
+export function runStatusLabel(status: RunStatus, stalled = false): string {
+  return stalled ? "Stalled" : RUN_STATUS_LABEL[status];
+}
+
 /**
  * How the daemon process was launched + whether it is installed as a
  * persistent service (#156 / ADR-0019). Folded into `GET /sessions` (not a

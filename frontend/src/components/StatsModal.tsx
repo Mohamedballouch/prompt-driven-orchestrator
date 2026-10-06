@@ -369,7 +369,7 @@ function StatsSurface({
       headerActions={
         <>
           <div
-            className="text-fg-4"
+            className="text-fg-3"
             style={{ fontSize: "10.5px" }}
             data-testid="stats-computed-at"
           >

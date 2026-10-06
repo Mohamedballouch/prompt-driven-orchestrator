@@ -517,6 +517,19 @@ describe("UnifiedLeftPanel run status dot", () => {
     );
   });
 
+  it("names each run status in words beside the dot (UI03)", () => {
+    renderPanel({
+      runs: [
+        { run_id: "r-failed", pipeline_name: "p", status: "failed", started_at: null },
+        { run_id: "r-await", pipeline_name: "p", status: "awaiting_user", started_at: null },
+        { run_id: "r-halted", pipeline_name: "p", status: "halted", started_at: null },
+        { run_id: "r-stalled", pipeline_name: "p", status: "running", stalled: true, started_at: null },
+      ],
+    });
+    const labels = screen.getAllByTestId("run-status-label").map((el) => el.textContent);
+    expect(labels).toEqual(expect.arrayContaining(["Failed", "Awaiting user", "Stopped", "Stalled"]));
+  });
+
   it("leaves the dot untitled when there is nothing to explain", () => {
     renderPanel({ runs: run({ status: "completed" }) });
     expect(screen.getByTestId("run-status-dot")).not.toHaveAttribute("title");

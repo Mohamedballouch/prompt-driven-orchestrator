@@ -337,6 +337,11 @@ describe("Pipeline info — Info tab on a Run is read-only (#948)", () => {
     expect(screen.getByTestId("pipeline-meta-prompt-required")).toHaveTextContent("Yes");
   });
 
+  it("names the Run status in words next to the dot (UI03)", () => {
+    render(<StorePanel run={makeRun({ status: "running" })} />);
+    expect(screen.getByTestId("info-panel-status")).toHaveTextContent("Running");
+  });
+
   it("keeps the Run stats alongside the graph stats", () => {
     render(<StorePanel run={makeRun()} />);
     expect(screen.getByTestId("run-stats")).toBeInTheDocument();
