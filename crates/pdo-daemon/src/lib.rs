@@ -30270,6 +30270,63 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stats_cost_project_filter_keeps_only_that_projects_runs() {
+        let state = test_state().await;
+        let repo = state.repo_root.to_string_lossy().into_owned();
+
+        async fn insert_event(db: &sqlx::SqlitePool, run: &str, ts: &str, kind: &str, payload: serde_json::Value) {
+            sqlx::query(
+                "INSERT INTO events (run_id, ts, kind, node_id, iter, payload) VALUES (?, ?, ?, NULL, NULL, ?)",
+            )
+            .bind(run)
+            .bind(ts)
+            .bind(kind)
+            .bind(payload.to_string())
+            .execute(db)
+            .await
+            .unwrap();
+        }
+        for (run, target) in [("proj-here", repo.as_str()), ("proj-other", "/tmp/pdo-other-repo")] {
+            insert_event(
+                &state.db,
+                run,
+                "2033-04-02T09:00:00.000Z",
+                "run_started",
+                serde_json::json!({
+                    "pipeline_id": "p", "pipeline_name": "p", "target_repo": target, "harness": "claude",
+                    "node_defs": [{"id": "worker", "name": "Worker", "node_type": "agent"}]
+                }),
+            )
+            .await;
+        }
+
+        async fn call(state: &Arc<AppState>, uri: &str) -> serde_json::Value {
+            let response = build_router(state.clone())
+                .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            serde_json::from_slice(&axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+        }
+        let base = "/stats/cost?from=2033-04-01T00:00:00.000Z&to=2033-04-03T00:00:00.000Z&bucket=day";
+
+        let all = call(&state, base).await;
+        assert_eq!(all["total"]["executions"], 2);
+        assert_eq!(all["total"]["unit"], "run");
+        assert!(all["model_total"].is_object());
+
+        let other = call(&state, &format!("{base}&project=%2Ftmp%2Fpdo-other-repo")).await;
+        assert_eq!(other["total"]["executions"], 1);
+        let projects: Vec<&str> = other["by_project"].as_array().unwrap().iter()
+            .map(|p| p["id"].as_str().unwrap()).collect();
+        assert_eq!(projects, vec!["/tmp/pdo-other-repo"]);
+
+        let none = call(&state, &format!("{base}&project=no-such-project")).await;
+        assert_eq!(none["total"]["executions"], 0);
+        assert_eq!(none["total"]["usd"], serde_json::Value::Null);
+    }
+
+    #[tokio::test]
     async fn stats_performance_empty_cohort_is_not_an_error() {
         let state = test_state().await;
         let response = build_router(state)

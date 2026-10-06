@@ -52,6 +52,11 @@ pub(crate) struct StatsQuery {
     /// absorptions applied.
     #[serde(default)]
     pub uncombined: bool,
+    /// UI04: keep only the Runs of this Project (a Project id, or the repository
+    /// path of a Run whose repository belongs to no named Project — the ids of
+    /// `by_project`). Read by `/stats/cost`; `/stats/overview` does not filter.
+    #[serde(default)]
+    pub project: Option<String>,
 }
 
 /// The SQL fragment that narrows a Run-keyed query to the « completed runs
@@ -279,7 +284,16 @@ fn project_identity(
     daemon_root: &Path,
     projects: &[crate::project_store::Project],
 ) -> (String, String) {
-    let root = cost_project_root(payload, daemon_root);
+    project_identity_for_root(&cost_project_root(payload, daemon_root), projects)
+}
+
+/// The Project a repository root belongs to, as `(id, name)`: the named Project
+/// whose members list the root verbatim, else the root path itself named after
+/// its last segment. Shared by the cost fold and the Dashboard (UI04).
+pub(crate) fn project_identity_for_root(
+    root: &Path,
+    projects: &[crate::project_store::Project],
+) -> (String, String) {
     let root_text = root.to_string_lossy().into_owned();
     if let Some(project) = projects
         .iter()
@@ -640,6 +654,30 @@ pub(crate) struct ResolvedPriceRow {
     pub output: f64,
 }
 
+/// What one sample of a cost aggregate is (UI02, docs/reference/dashboard-metrics.md):
+/// the unit its `executions`, `readable`, `unknown`, `coverage`, `average_usd` and
+/// `median_usd` count. A Run on `total`, periods, Pipelines and Projects; a Node
+/// execution on Node rows; a model × effort slice of one on the « By model » axis.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub(crate) enum CostUnit {
+    #[default]
+    Run,
+    Execution,
+    Slice,
+}
+
+/// How completely each sample's cost is known (UI02), in the aggregate's `unit`:
+/// `complete` — every contribution read and none a lower bound; `partial` — some
+/// spend known, but a contribution is unknown or a lower bound (`†`); `unavailable`
+/// — no spend known. The three always sum to `executions`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub(crate) struct CostCoverage {
+    pub complete: i64,
+    pub partial: i64,
+    pub unavailable: i64,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct StatsHarnessCost {
     pub harness: String,
@@ -669,15 +707,18 @@ pub(crate) struct StatsHarnessCost {
     /// openrouter) — tooltip only, never part of the identity (ADR-0065 §2).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provider: Option<String>,
+    /// UI02: what the counts and the median of this aggregate count.
+    pub unit: CostUnit,
+    /// UI02: complete / partial / unavailable samples, in `unit`.
+    pub coverage: CostCoverage,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(crate) struct StatsCostAggregate {
     pub usd: Option<f64>,
     pub average_usd: Option<f64>,
-    /// The **median** cost per readable execution (#811) — additive beside
-    /// `average_usd`, which stays for the tooltip and for any client that has
-    /// not caught up. See [`CostMetricAcc::median_usd`].
+    /// R-7 median of the readable samples' cost, in `unit` (#811, UI02): per Run
+    /// on Run aggregates, per execution on Node rows, per slice on the model axis.
     pub median_usd: Option<f64>,
     pub estimated: bool,
     pub partial: bool,
@@ -687,6 +728,10 @@ pub(crate) struct StatsCostAggregate {
     pub unpriced_models: Vec<String>,
     pub missing_reasons: Vec<String>,
     pub harnesses: Vec<StatsHarnessCost>,
+    /// UI02: what the counts and the median of this aggregate count.
+    pub unit: CostUnit,
+    /// UI02: complete / partial / unavailable samples, in `unit`.
+    pub coverage: CostCoverage,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -804,6 +849,10 @@ pub(crate) struct StatsCost {
     pub by_pipeline: Vec<StatsCostEntity>,
     pub by_project: Vec<StatsProjectCostEntity>,
     pub by_model: Vec<StatsModelCostEntity>,
+    /// UI02: the « By model » axis Total — every model × effort slice of the
+    /// cohort, so it reconciles with the model rows (`total` is per Run).
+    pub model_total: StatsCostAggregate,
+    pub model_total_by_period: Vec<StatsCostPeriod>,
     pub resolved: Vec<ResolvedPriceRow>,
 }
 
@@ -825,6 +874,10 @@ struct CostMetricAcc {
     readable_values: Vec<f64>,
     unpriced_models: BTreeSet<String>,
     missing_reasons: BTreeSet<String>,
+    /// UI02: what one sample is, set by the first `add_*` — an accumulator only
+    /// ever receives one kind of add. `None` (nothing added) wires as `Run`.
+    unit: Option<CostUnit>,
+    coverage: CostCoverage,
 }
 
 impl CostMetricAcc {
@@ -867,6 +920,14 @@ impl CostMetricAcc {
             .extend(contribution.unpriced_models.iter().cloned());
         self.missing_reasons
             .extend(contribution.unavailable_reasons.iter().cloned());
+        self.unit.get_or_insert(CostUnit::Execution);
+        self.coverage.unavailable +=
+            (contribution.executions - contribution.readable_executions).max(0);
+        if contribution.partial {
+            self.coverage.partial += contribution.readable_executions;
+        } else {
+            self.coverage.complete += contribution.readable_executions;
+        }
     }
 
     fn add_run(&mut self, contributions: &[&crate::run_cost::CostContribution]) {
@@ -894,6 +955,16 @@ impl CostMetricAcc {
             self.missing_reasons
                 .extend(contribution.unavailable_reasons.iter().cloned());
         }
+        self.unit.get_or_insert(CostUnit::Run);
+        let any_known = contributions.iter().any(|c| c.usd.is_some());
+        let any_lower_bound = contributions.iter().any(|c| c.partial);
+        if all_readable && !any_lower_bound {
+            self.coverage.complete += 1;
+        } else if any_known {
+            self.coverage.partial += 1;
+        } else {
+            self.coverage.unavailable += 1;
+        }
         if all_readable {
             self.readable_usd += run_usd;
             self.readable_values.push(run_usd);
@@ -915,6 +986,8 @@ impl CostMetricAcc {
             unpriced_models: self.unpriced_models.iter().cloned().collect(),
             missing_reasons: self.missing_reasons.iter().cloned().collect(),
             harnesses: Vec::new(),
+            unit: self.unit.unwrap_or_default(),
+            coverage: self.coverage,
         }
     }
 
@@ -934,6 +1007,8 @@ impl CostMetricAcc {
             provenance: None,
             effort_provenance: None,
             provider: None,
+            unit: self.unit.unwrap_or_default(),
+            coverage: self.coverage,
         }
     }
 
@@ -958,6 +1033,12 @@ impl CostMetricAcc {
             .extend(slice.unpriced_models.iter().cloned());
         self.missing_reasons
             .extend(slice.missing_reasons.iter().cloned());
+        self.unit.get_or_insert(CostUnit::Slice);
+        match (slice.usd.is_some(), slice.partial) {
+            (true, false) => self.coverage.complete += slice.executions,
+            (true, true) => self.coverage.partial += slice.executions,
+            (false, _) => self.coverage.unavailable += slice.executions,
+        }
     }
 }
 
@@ -1062,6 +1143,17 @@ impl CostAggregateAcc {
             .iter()
             .map(|(harness, metric)| metric.clone().wire(harness.clone()))
             .collect();
+        aggregate
+    }
+
+    /// `wire`, for an accumulator whose unit is fixed even when it saw no sample:
+    /// the model-axis Total of an empty cohort is still a slice aggregate.
+    fn wire_as(&self, unit: CostUnit) -> StatsCostAggregate {
+        let mut aggregate = self.wire();
+        aggregate.unit = unit;
+        for harness in &mut aggregate.harnesses {
+            harness.unit = unit;
+        }
         aggregate
     }
 }
@@ -1476,6 +1568,8 @@ fn fold_harness_cost(
     let mut pipelines = BTreeMap::<String, CostEntityAcc>::new();
     let mut projects = BTreeMap::<String, CostProjectAcc>::new();
     let mut models_axis = BTreeMap::<String, ModelAcc>::new();
+    let mut model_total = CostAggregateAcc::default();
+    let mut model_total_periods = BTreeMap::<String, CostAggregateAcc>::new();
     let mut active_harnesses = BTreeSet::new();
 
     for run in runs {
@@ -1592,6 +1686,12 @@ fn fold_harness_cost(
             // identity as the axes above. Slices land in every level of both
             // hierarchies so headline, cards and period bars all re-scope.
             for slice in &contribution.model_slices {
+                // UI02: the « By model » Total folds the same slices as its rows.
+                model_total.add_slice(&contribution.harness, slice);
+                model_total_periods
+                    .entry(run.bucket.clone())
+                    .or_default()
+                    .add_slice(&contribution.harness, slice);
                 // #906: the Node's couple goes through the global absorptions
                 // (effort on the raw model, then model), then the couple
                 // absorptions of its raw Node — the « By model » axis below
@@ -1754,6 +1854,8 @@ fn fold_harness_cost(
         by_pipeline,
         by_project,
         by_model: wire_by_model(models_axis, resolver),
+        model_total: model_total.wire_as(CostUnit::Slice),
+        model_total_by_period: wire_periods(model_total_periods),
         resolved,
     }
 }
@@ -1852,6 +1954,10 @@ pub(crate) async fn stats_cost(
         let repo_root = cost_project_root(&payload, &state.repo_root);
         let (project_id, project_name) =
             project_identity(&payload, &state.repo_root, &stored_projects);
+        // UI04: one Project's cost — Runs are dropped before any transcript is read.
+        if q.project.as_deref().is_some_and(|wanted| wanted != project_id) {
+            continue;
+        }
 
         // #408: read the transcripts from the sandboxed Run's staged home while it
         // is live (else `~/.claude/projects/`). Read `sandbox` straight off the
@@ -2481,6 +2587,163 @@ mod tests {
                 .collect(),
             model_slices: slices,
         }
+    }
+
+    fn infra_contribution(usd: Option<f64>) -> crate::run_cost::CostContribution {
+        crate::run_cost::CostContribution {
+            harness: "claude".to_string(),
+            scope: crate::run_cost::CostScope::Infrastructure,
+            node_id: None,
+            executions: 1,
+            readable_executions: i64::from(usd.is_some()),
+            usd,
+            form: usd.map(|_| crate::event_log::CostForm::Derived),
+            reported_in_usd: false,
+            partial: false,
+            unpriced_models: Vec::new(),
+            unavailable_reasons: usd
+                .is_none()
+                .then(|| "no attributable infrastructure cost".to_string())
+                .into_iter()
+                .collect(),
+            model_slices: Vec::new(),
+        }
+    }
+
+    fn priced_slice(model: &str, usd: Option<f64>, partial: bool) -> crate::run_cost::ModelEffortSlice {
+        crate::run_cost::ModelEffortSlice {
+            model: model.to_string(),
+            model_observed: true,
+            effort: None,
+            effort_observed: None,
+            provider: None,
+            usd,
+            estimated: true,
+            partial,
+            executions: 1,
+            unpriced_models: if partial { vec![model.to_string()] } else { Vec::new() },
+            missing_reasons: Vec::new(),
+        }
+    }
+
+    fn cohort_row(run_id: &str, contributions: Vec<crate::run_cost::CostContribution>) -> CostRunRow {
+        let mut row = node_run_row("2033-04-02", "worker", "Worker", contributions);
+        row.run_id = run_id.to_string();
+        row
+    }
+
+    #[test]
+    fn run_level_aggregates_count_runs_with_contribution_coverage() {
+        let mut lower_bound = claude_node_contribution("worker", Some(2.0), Vec::new());
+        lower_bound.partial = true;
+        lower_bound.unpriced_models = vec!["mystery".to_string()];
+        let runs = vec![
+            // every contribution read → complete
+            cohort_row("complete", vec![
+                claude_node_contribution("worker", Some(1.0), Vec::new()),
+                infra_contribution(Some(0.5)),
+            ]),
+            // node read, infrastructure unknown → partial, its dollar still counts
+            cohort_row("infra-unknown", vec![
+                claude_node_contribution("worker", Some(3.0), Vec::new()),
+                infra_contribution(None),
+            ]),
+            // a lower bound (unpriced model) → partial
+            cohort_row("lower-bound", vec![lower_bound, infra_contribution(Some(0.0))]),
+            // nothing known → unavailable
+            cohort_row("unknown", vec![
+                claude_node_contribution("worker", None, Vec::new()),
+                infra_contribution(None),
+            ]),
+        ];
+
+        let stats = fold_harness_cost(&runs, Vec::new(), &Default::default());
+
+        assert_eq!(stats.total.unit, CostUnit::Run);
+        assert_eq!(stats.total.executions, 4);
+        assert_eq!(
+            stats.total.coverage,
+            CostCoverage { complete: 1, partial: 2, unavailable: 1 }
+        );
+        assert_eq!(stats.total.usd, Some(6.5));
+        let claude = &stats.total.harnesses[0];
+        assert_eq!(claude.unit, CostUnit::Run);
+        assert_eq!(
+            claude.coverage.complete + claude.coverage.partial + claude.coverage.unavailable,
+            claude.executions
+        );
+        assert_eq!(stats.by_period[0].aggregate.unit, CostUnit::Run);
+        assert_eq!(stats.by_pipeline[0].aggregate.unit, CostUnit::Run);
+        // Node rows count executions, Infrastructure included.
+        let pipeline = &stats.by_pipeline[0];
+        let worker = pipeline.nodes.iter().find(|n| n.id == "worker").unwrap();
+        assert_eq!(worker.aggregate.unit, CostUnit::Execution);
+        assert_eq!(
+            worker.aggregate.coverage,
+            CostCoverage { complete: 2, partial: 1, unavailable: 1 }
+        );
+        let infra = pipeline.nodes.iter().find(|n| n.name == "Infrastructure").unwrap();
+        assert_eq!(infra.aggregate.unit, CostUnit::Execution);
+        assert_eq!(
+            infra.aggregate.coverage,
+            CostCoverage { complete: 2, partial: 0, unavailable: 2 }
+        );
+    }
+
+    #[test]
+    fn model_axis_total_folds_slices_and_reconciles_with_model_rows() {
+        // Unequal samples: opus 3 slices ($1, $2, $3), sonnet 1 slice ($10).
+        let runs = vec![
+            cohort_row("a", vec![claude_node_contribution("worker", Some(1.0), vec![priced_slice("opus", Some(1.0), false)])]),
+            cohort_row("b", vec![claude_node_contribution("worker", Some(2.0), vec![priced_slice("opus", Some(2.0), false)])]),
+            cohort_row("c", vec![claude_node_contribution("worker", Some(3.0), vec![priced_slice("opus", Some(3.0), false)])]),
+            cohort_row("d", vec![claude_node_contribution("worker", Some(10.0), vec![priced_slice("sonnet", Some(10.0), false)])]),
+        ];
+
+        let stats = fold_harness_cost(&runs, Vec::new(), &Default::default());
+
+        assert_eq!(stats.model_total.unit, CostUnit::Slice);
+        assert_eq!(stats.model_total.executions, 4);
+        let rows_usd: f64 = stats.by_model.iter().map(|m| m.entity.aggregate.usd.unwrap()).sum();
+        assert_eq!(stats.model_total.usd, Some(rows_usd));
+        // R-7 median of [1, 2, 3, 10] — from the samples, not from the rows' medians.
+        assert_eq!(stats.model_total.median_usd, Some(2.5));
+        assert_eq!(stats.model_total.coverage, CostCoverage { complete: 4, partial: 0, unavailable: 0 });
+        assert!(stats.by_model.iter().all(|m| m.entity.aggregate.unit == CostUnit::Slice));
+        assert_eq!(stats.model_total_by_period.len(), 1);
+        assert_eq!(stats.model_total_by_period[0].aggregate.unit, CostUnit::Slice);
+        // The per-Run total is a different population, and says so.
+        assert_eq!(stats.total.unit, CostUnit::Run);
+    }
+
+    #[test]
+    fn empty_cohort_wires_an_empty_slice_total_never_zero() {
+        let stats = fold_harness_cost(&[], Vec::new(), &Default::default());
+        assert_eq!(stats.model_total.unit, CostUnit::Slice);
+        assert_eq!(stats.model_total.executions, 0);
+        assert_eq!(stats.model_total.usd, None);
+        assert_eq!(stats.model_total.median_usd, None);
+        assert_eq!(stats.model_total.coverage, CostCoverage::default());
+        assert!(stats.model_total_by_period.is_empty());
+        assert_eq!(stats.total.usd, None);
+        assert_eq!(stats.total.coverage, CostCoverage::default());
+    }
+
+    #[test]
+    fn a_slice_with_an_unpriced_model_is_partial_coverage() {
+        let runs = vec![cohort_row(
+            "a",
+            vec![claude_node_contribution("worker", Some(1.0), vec![
+                priced_slice("opus", Some(1.0), false),
+                priced_slice("mystery", Some(0.0), true),
+                priced_slice("ghost", None, false),
+            ])],
+        )];
+        let stats = fold_harness_cost(&runs, Vec::new(), &Default::default());
+        assert_eq!(
+            stats.model_total.coverage,
+            CostCoverage { complete: 1, partial: 1, unavailable: 1 }
+        );
     }
 
     #[test]
