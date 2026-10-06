@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import {
   costPrecision,
   formatCostAmount,
+  costUnitNoun,
+  formatCoverage,
   formatEstCost,
   nodeCostTitle,
   COST_ESTIMATE_NOTE,
@@ -250,5 +252,25 @@ describe("formatEstCost (single run, #272)", () => {
     expect(c.title).toContain("claude-opus-6");
     // The reported slice never contributes an unpriced-model name.
     expect(c.title).toMatch(/via `copilot` \(reported\)/);
+  });
+});
+
+describe("costUnitNoun (UI02)", () => {
+  it("names a Run sample per Run and a slice per execution", () => {
+    expect(costUnitNoun("run")).toBe("Run");
+    expect(costUnitNoun("run", 2)).toBe("Runs");
+    expect(costUnitNoun("execution")).toBe("execution");
+    expect(costUnitNoun("slice", 3)).toBe("executions");
+  });
+});
+
+describe("formatCoverage (UI02)", () => {
+  it("states the three coverage counts with their unit", () => {
+    expect(formatCoverage({ complete: 3, partial: 1, unavailable: 1 }, "run")).toBe(
+      "5 Runs: 3 complete · 1 partial · 1 unavailable",
+    );
+    expect(formatCoverage({ complete: 1, partial: 0, unavailable: 0 }, "execution")).toBe(
+      "1 execution: 1 complete · 0 partial · 0 unavailable",
+    );
   });
 });

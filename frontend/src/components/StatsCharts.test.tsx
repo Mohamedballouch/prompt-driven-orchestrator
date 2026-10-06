@@ -9,7 +9,9 @@ import {
   TAB_COHORT_DEFAULTS,
   type PerformanceBand,
 } from "../lib/statsFilters";
+import { formatCoverage } from "../lib/costLabel";
 import type {
+  CostUnit,
   PerformanceModelEffortPair,
   StatsCost,
   StatsDistribution,
@@ -88,7 +90,25 @@ const EMPTY_COST: StatsCost = {
     unpriced_models: [],
     missing_reasons: [],
     harnesses: [],
+    unit: "run",
+    coverage: { complete: 0, partial: 0, unavailable: 0 },
   },
+  model_total: {
+    usd: null,
+    average_usd: null,
+    median_usd: null,
+    estimated: true,
+    partial: false,
+    executions: 0,
+    readable: 0,
+    unknown: 0,
+    unpriced_models: [],
+    missing_reasons: [],
+    harnesses: [],
+    unit: "slice",
+    coverage: { complete: 0, partial: 0, unavailable: 0 },
+  },
+  model_total_by_period: [],
   by_period: [],
   by_pipeline: [],
   by_model: [],
@@ -110,6 +130,8 @@ const COST_HARNESSES: StatsHarnessCost[] = [
     median_usd: 1.75,
     unpriced_models: ["claude-unknown"],
     missing_reasons: [],
+    unit: "run",
+    coverage: { complete: 0, partial: 2, unavailable: 0 },
   },
   {
     harness: "copilot",
@@ -123,6 +145,8 @@ const COST_HARNESSES: StatsHarnessCost[] = [
     median_usd: 2,
     unpriced_models: [],
     missing_reasons: [],
+    unit: "run",
+    coverage: { complete: 1, partial: 0, unavailable: 0 },
   },
   {
     harness: "opencode",
@@ -136,8 +160,16 @@ const COST_HARNESSES: StatsHarnessCost[] = [
     median_usd: null,
     unpriced_models: [],
     missing_reasons: ["harness has no cost source"],
+    unit: "run",
+    coverage: { complete: 0, partial: 0, unavailable: 1 },
   },
 ];
+
+// The same harness rows, re-based on the unit of the level they sit under (UI02).
+const harnessesIn = (
+  unit: CostUnit,
+  ...rows: StatsHarnessCost[]
+): StatsHarnessCost[] => rows.map((row) => ({ ...row, unit }));
 
 const COST: StatsCost = {
   ...EMPTY_COST,
@@ -153,6 +185,8 @@ const COST: StatsCost = {
     unknown: 1,
     unpriced_models: ["claude-unknown"],
     missing_reasons: ["opencode has no cost source"],
+    unit: "run",
+    coverage: { complete: 0, partial: 3, unavailable: 1 },
     harnesses: [
       {
         harness: "claude",
@@ -166,6 +200,8 @@ const COST: StatsCost = {
         median_usd: 1.75,
         unpriced_models: ["claude-unknown"],
         missing_reasons: [],
+        unit: "run",
+        coverage: { complete: 0, partial: 2, unavailable: 0 },
       },
       {
         harness: "copilot",
@@ -179,6 +215,8 @@ const COST: StatsCost = {
         median_usd: 2,
         unpriced_models: [],
         missing_reasons: [],
+        unit: "run",
+        coverage: { complete: 1, partial: 0, unavailable: 0 },
       },
       {
         harness: "opencode",
@@ -192,9 +230,17 @@ const COST: StatsCost = {
         median_usd: null,
         unpriced_models: [],
         missing_reasons: ["harness has no cost source"],
+        unit: "run",
+        coverage: { complete: 0, partial: 0, unavailable: 1 },
       },
     ],
   },
+  model_total: {
+    usd: 9, average_usd: 4.5, median_usd: 4.5, estimated: true, partial: false,
+    executions: 2, readable: 2, unknown: 0, unpriced_models: [], missing_reasons: [],
+    harnesses: [], unit: "slice", coverage: { complete: 2, partial: 0, unavailable: 0 },
+  },
+  model_total_by_period: [],
   by_period: [
     {
       bucket: "2026-08-27",
@@ -205,6 +251,7 @@ const COST: StatsCost = {
         executions: 4,
         readable: 3,
         unknown: 1,
+        coverage: { complete: 0, partial: 3, unavailable: 1 },
         harnesses: COST_HARNESSES,
       },
     },
@@ -219,6 +266,7 @@ const COST: StatsCost = {
       executions: 4,
       readable: 3,
       unknown: 1,
+      coverage: { complete: 0, partial: 3, unavailable: 1 },
       harnesses: COST_HARNESSES,
       by_period: [
         {
@@ -229,6 +277,7 @@ const COST: StatsCost = {
           executions: 4,
           readable: 3,
           unknown: 1,
+          coverage: { complete: 0, partial: 3, unavailable: 1 },
           harnesses: COST_HARNESSES,
         },
       ],
@@ -240,7 +289,9 @@ const COST: StatsCost = {
           usd: 2,
           executions: 1,
           readable: 1,
-          harnesses: [COST_HARNESSES[1]],
+          unit: "execution",
+          coverage: { complete: 1, partial: 0, unavailable: 0 },
+          harnesses: harnessesIn("execution", COST_HARNESSES[1]),
           by_period: [],
           nodes: [],
         },
@@ -255,7 +306,9 @@ const COST: StatsCost = {
           executions: 2,
           readable: 1,
           unknown: 1,
-          harnesses: [COST_HARNESSES[0]],
+          unit: "execution",
+          coverage: { complete: 0, partial: 1, unavailable: 1 },
+          harnesses: harnessesIn("execution", COST_HARNESSES[0]),
           by_period: [],
           nodes: [],
         },
@@ -271,6 +324,7 @@ const COST: StatsCost = {
       partial: true,
       executions: 2,
       readable: 2,
+      coverage: { complete: 0, partial: 2, unavailable: 0 },
       harnesses: COST_HARNESSES,
       by_period: [],
       nodes: [],
@@ -299,7 +353,9 @@ const MODEL_PAIR: StatsModelEffortPair = {
   unknown: 0,
   unpriced_models: [],
   missing_reasons: [],
-  harnesses: [COST_HARNESSES[0]],
+  harnesses: harnessesIn("slice", COST_HARNESSES[0]),
+  unit: "slice",
+  coverage: { complete: 1, partial: 0, unavailable: 0 },
 };
 
 const effortEntity = (
@@ -321,6 +377,8 @@ const effortEntity = (
   unknown: usd === null ? 1 : 0,
   unpriced_models: [],
   missing_reasons: usd === null ? ["no attributable Claude transcript"] : [],
+  unit: "slice" as const,
+  coverage: { complete: usd === null ? 0 : 1, partial: 0, unavailable: usd === null ? 1 : 0 },
   harnesses: [],
   by_period: [],
   nodes: [],
@@ -339,6 +397,8 @@ const effortEntity = (
       unknown: usd === null ? 1 : 0,
       unpriced_models: [],
       missing_reasons: [],
+      unit: "slice" as const,
+      coverage: { complete: usd === null ? 0 : 1, partial: 0, unavailable: usd === null ? 1 : 0 },
       harnesses: [],
       by_period: [],
       models: [],
@@ -356,6 +416,8 @@ const effortEntity = (
           unknown: usd === null ? 1 : 0,
           unpriced_models: [],
           missing_reasons: [],
+          unit: "slice" as const,
+          coverage: { complete: usd === null ? 0 : 1, partial: 0, unavailable: usd === null ? 1 : 0 },
           harnesses: [],
           by_period: [],
           nodes: [],
@@ -381,6 +443,8 @@ COST.by_model = [
     unknown: 0,
     unpriced_models: [],
     missing_reasons: [],
+    unit: "slice",
+    coverage: { complete: 2, partial: 0, unavailable: 0 },
     harnesses: [],
     by_period: [],
     nodes: [],
@@ -401,6 +465,8 @@ COST.by_model = [
     unknown: 0,
     unpriced_models: [],
     missing_reasons: [],
+    unit: "slice",
+    coverage: { complete: 1, partial: 0, unavailable: 0 },
     harnesses: [],
     by_period: [],
     nodes: [],
@@ -414,7 +480,7 @@ COST.by_pipeline[0].nodes[1].models = [MODEL_PAIR];
 // transcript, pi off its session (via openrouter) — each entry saying where
 // its half was read.
 COST.by_model[1].harnesses = [
-  { ...COST_HARNESSES[0], provenance: "observed" },
+  { ...COST_HARNESSES[0], unit: "slice", provenance: "observed" },
   {
     harness: "pi",
     usd: 1.5,
@@ -427,6 +493,8 @@ COST.by_model[1].harnesses = [
     median_usd: 1.5,
     unpriced_models: [],
     missing_reasons: [],
+    unit: "slice",
+    coverage: { complete: 1, partial: 0, unavailable: 0 },
     provenance: "observed",
     provider: "openrouter",
   },
@@ -742,12 +810,12 @@ describe("StatsCharts — harness drill-down (#638)", () => {
       // #811 — the card's sub-line is the MEDIAN per execution (1.75), never
       // the average beside it on the wire (2.50).
       expect(screen.getByTestId("stats-harness-card-claude")).toHaveTextContent(
-        "~$1.75† median",
+        "~$1.75† median per Run",
       );
       expect(screen.getByTestId("stats-harness-card-claude")).not.toHaveTextContent("avg");
       expect(screen.getByTestId("stats-harness-card-copilot")).toHaveTextContent("$2.00");
       expect(screen.getByTestId("stats-harness-card-opencode")).toHaveTextContent("—");
-      expect(screen.getByText(/1 Run without computable cost/i)).toBeInTheDocument();
+      expect(screen.getByTestId("stats-cost-coverage")).toHaveTextContent(/partial|unavailable/);
       expect(screen.getByTestId("stats-selection-headline")).toHaveTextContent(
         "~$7.00† total · ~$1.50† median per Run",
       );
@@ -936,22 +1004,30 @@ describe("StatsCharts — Cost « By model » (#735, ADR-0065)", () => {
     expect(screen.queryByTestId("stats-model-effort-row")).not.toBeInTheDocument();
   });
 
-  it("reads per execution on the model axis and per Run at Total on By pipeline", async () => {
+  it("labels every median with the unit of the figure it shows (UI02)", async () => {
     const user = userEvent.setup();
     render(<StatsCharts tab="cost" overview={null} cost={COST} costError={null} />);
 
-    const headline = screen.getByTestId("stats-selection-headline");
-    expect(headline).toHaveTextContent("per Run");
+    // By pipeline › Total: per Run.
+    expect(screen.getByTestId("stats-selection-headline")).toHaveTextContent(/median per Run$/);
 
-    await user.selectOptions(screen.getByRole("combobox", { name: "Cost grouping" }), "model");
-    expect(headline).toHaveTextContent("per execution");
-
-    // Back on By pipeline, the Node level counts executions; Total counts Runs.
-    await user.selectOptions(screen.getByRole("combobox", { name: "Cost grouping" }), "pipeline");
+    // A Pipeline selected: its headline is still per Run, only its Node rows are per execution.
     await user.click(screen.getByRole("option", { name: /Implement loop/ }));
-    expect(headline).toHaveTextContent("per execution");
-    await user.click(screen.getByRole("button", { name: "Back to Total" }));
-    expect(headline).toHaveTextContent("per Run");
+    expect(screen.getByTestId("stats-selection-headline")).toHaveTextContent(/median per Run$/);
+
+    // By model › Total: the slice fold, never the per-Run total relabelled.
+    await user.selectOptions(screen.getByRole("combobox", { name: "Cost grouping" }), "model");
+    expect(screen.getByTestId("stats-selection-headline")).toHaveTextContent(
+      "~$9.00 total · ~$4.50 median per execution",
+    );
+  });
+
+  it("shows complete, partial and unavailable coverage instead of a bare unknown count (UI02)", () => {
+    render(<StatsCharts tab="cost" overview={null} cost={COST} costError={null} />);
+    expect(screen.getByTestId("stats-cost-coverage")).toHaveTextContent(
+      formatCoverage(COST.total.coverage, "run"),
+    );
+    expect(screen.queryByText(/without computable cost/i)).not.toBeInTheDocument();
   });
 
   it("never says « real » — the vocabulary is observed/requested", async () => {

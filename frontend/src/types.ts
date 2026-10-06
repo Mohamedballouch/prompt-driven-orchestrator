@@ -1872,6 +1872,17 @@ export interface StatsAbsorption {
   members: { key: string; name: string; origin: "manual" | "rename"; created_at: string }[];
 }
 
+/** What one sample of a cost aggregate is (UI02, docs/reference/dashboard-metrics.md):
+ *  the unit `executions`, `readable`, `unknown`, `coverage` and the median count. */
+export type CostUnit = "run" | "execution" | "slice";
+
+/** Complete / partial / unavailable samples, in the aggregate's `unit`; sums to `executions`. */
+export interface CostCoverage {
+  complete: number;
+  partial: number;
+  unavailable: number;
+}
+
 /** One harness's cost and denominator coverage within an aggregate. */
 export interface StatsHarnessCost {
   harness: string;
@@ -1897,13 +1908,15 @@ export interface StatsHarnessCost {
   /** The provider the source named for this model (pi via openrouter) —
    *  tooltip only, never part of the identity (ADR-0065 §2). */
   provider?: string | null;
+  unit: CostUnit;
+  coverage: CostCoverage;
 }
 
 /** Cost shared by Total, periods, Projects, Pipelines and Nodes. */
 export interface StatsCostAggregate {
   usd: number | null;
   average_usd: number | null;
-  /** Median cost per readable execution (#811) — see `StatsHarnessCost`. */
+  /** R-7 median of the readable samples, in `unit` (per Run, per execution or per model slice). */
   median_usd: number | null;
   estimated: boolean;
   partial: boolean;
@@ -1913,6 +1926,8 @@ export interface StatsCostAggregate {
   unpriced_models: string[];
   missing_reasons: string[];
   harnesses: StatsHarnessCost[];
+  unit: CostUnit;
+  coverage: CostCoverage;
 }
 
 export interface StatsCostPeriod extends StatsCostAggregate {
@@ -1994,6 +2009,9 @@ export interface StatsCost {
   /** The « By model » axis (ADR-0065): models ranked by cost, each with its
    *  effort → pipeline → node tree. */
   by_model: StatsModelCostEntity[];
+  /** The « By model » axis Total: every model × effort slice (unit `slice`), so it reconciles with `by_model`. */
+  model_total: StatsCostAggregate;
+  model_total_by_period: StatsCostPeriod[];
   /** The resolved price table, one row per family in alphabetical order (#528).
    *  Window-independent — a property of the price table, not the fold. Refreshed
    *  by the "Sync costs" refetch on the Cost tab. */

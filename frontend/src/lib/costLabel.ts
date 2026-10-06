@@ -7,7 +7,7 @@
 // The vocabulary lives here ONCE so the per-run row and the charts stay
 // byte-identical.
 
-import type { HarnessCost, NodeCost } from "../types";
+import type { CostCoverage, CostUnit, HarnessCost, NodeCost } from "../types";
 
 /** Adaptive precision: sub-dollar estimates show 4 decimals, else 2 (#272). */
 export function costPrecision(usd: number): number {
@@ -239,4 +239,17 @@ export function formatEstCost(
     dagger: partial,
     title: COST_ESTIMATE_NOTE + (partial ? lowerBoundClause(unpricedModels) : ""),
   };
+}
+
+/** The noun a cost median or coverage is "per" (UI02). A model slice reads as an
+ *  execution (ADR-0065 §3): on the model axis one execution counts once per model. */
+export function costUnitNoun(unit: CostUnit, count = 1): string {
+  const noun = unit === "run" ? "Run" : "execution";
+  return count === 1 ? noun : `${noun}s`;
+}
+
+/** « 5 Runs: 3 complete · 1 partial · 1 unavailable » — the coverage line (UI02). */
+export function formatCoverage(coverage: CostCoverage, unit: CostUnit): string {
+  const total = coverage.complete + coverage.partial + coverage.unavailable;
+  return `${total} ${costUnitNoun(unit, total)}: ${coverage.complete} complete · ${coverage.partial} partial · ${coverage.unavailable} unavailable`;
 }

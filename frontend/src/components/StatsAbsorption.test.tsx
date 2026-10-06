@@ -436,6 +436,8 @@ describe("Stats absorption — Cost (#890)", () => {
     unpriced_models: [],
     missing_reasons: [],
     harnesses: [],
+    unit: "run",
+    coverage: { complete: 3, partial: 0, unavailable: 0 },
   };
   const row = (
     id: string,
@@ -454,6 +456,8 @@ describe("Stats absorption — Cost (#890)", () => {
   const cost: StatsCost = {
     harnesses: [],
     total: aggregate,
+    model_total: { ...aggregate, unit: "slice" },
+    model_total_by_period: [],
     by_period: [],
     by_pipeline: [
       row("keep", "Keep", {
@@ -731,6 +735,8 @@ describe("Stats absorption — Cost Nodes and Models (#892)", () => {
     unpriced_models: [],
     missing_reasons: [],
     harnesses: [],
+    unit: "run",
+    coverage: { complete: 3, partial: 0, unavailable: 0 },
   };
   const row = (
     id: string,
@@ -752,12 +758,15 @@ describe("Stats absorption — Cost Nodes and Models (#892)", () => {
     extra: Partial<StatsCostEntity> = {},
   ) => ({
     ...row(id, id, { usd, ...extra }),
+    unit: "slice" as const,
     provenance: "observed" as const,
     efforts: [],
   });
   const cost: StatsCost = {
     harnesses: [],
     total: aggregate,
+    model_total: { ...aggregate, unit: "slice" },
+    model_total_by_period: [],
     by_period: [],
     by_pipeline: [
       row("reviewer", "Reviewer", {
@@ -1034,6 +1043,8 @@ describe("Stats absorption — efforts of a model and couples of a Node (#906)",
     unpriced_models: [],
     missing_reasons: [],
     harnesses: [],
+    unit: "run",
+    coverage: { complete: 3, partial: 0, unavailable: 0 },
   };
   const row = (
     id: string,
@@ -1054,7 +1065,7 @@ describe("Stats absorption — efforts of a model and couples of a Node (#906)",
     lastRun: string,
     extra: Partial<StatsEffortCostEntity> = {},
   ): StatsEffortCostEntity => ({
-    ...row(effort ?? "", effort ?? "not set", { last_run: lastRun }),
+    ...row(effort ?? "", effort ?? "not set", { last_run: lastRun, unit: "slice" }),
     effort,
     provenance: effort === null ? null : "requested",
     pipelines: [],
@@ -1064,7 +1075,7 @@ describe("Stats absorption — efforts of a model and couples of a Node (#906)",
     id: string,
     efforts: StatsEffortCostEntity[],
   ): StatsModelCostEntity => ({
-    ...row(id, id),
+    ...row(id, id, { unit: "slice" }),
     provenance: "observed",
     efforts,
   });
@@ -1075,6 +1086,7 @@ describe("Stats absorption — efforts of a model and couples of a Node (#906)",
     extra: Partial<StatsModelEffortPair> = {},
   ): StatsModelEffortPair => ({
     ...aggregate,
+    unit: "slice",
     key: `${model}|${effort ?? ""}`,
     model,
     model_provenance: "observed",
@@ -1097,6 +1109,8 @@ describe("Stats absorption — efforts of a model and couples of a Node (#906)",
   const cost = (extra: Partial<StatsCost> = {}): StatsCost => ({
     harnesses: [],
     total: aggregate,
+    model_total: { ...aggregate, unit: "slice" },
+    model_total_by_period: [],
     by_period: [],
     by_pipeline: [
       row("delta", "Delta", {

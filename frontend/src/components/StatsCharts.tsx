@@ -33,7 +33,7 @@ import type {
   StatsSessionPeriod,
   StatsSteeredRate,
 } from "../types";
-import { formatCostAmount } from "../lib/costLabel";
+import { costUnitNoun, formatCostAmount, formatCoverage } from "../lib/costLabel";
 import { harnessColor } from "../lib/harness";
 import { cssColor } from "../lib/cssColor";
 import { useTheme } from "../hooks/useTheme";
@@ -801,11 +801,9 @@ function TriggersTab({ overview }: { overview: StatsOverview }) {
   );
 }
 
-function coverage(metric: StatsHarnessCost, unit: "Run" | "execution"): string {
+function coverage(metric: StatsHarnessCost): string {
   const parts = [
-    `${metric.readable} readable ${metric.readable === 1 ? "cost" : "costs"} of ${metric.executions} ${
-      metric.executions === 1 ? unit : `${unit}s`
-    }`,
+    `${metric.readable} readable ${metric.readable === 1 ? "cost" : "costs"} of ${metric.executions} ${costUnitNoun(metric.unit, metric.executions)}`,
   ];
   if (metric.unpriced_models.length) {
     parts.push(`Lower bound; unpriced: ${metric.unpriced_models.join(", ")}`);
@@ -839,8 +837,8 @@ function HarnessCards({ aggregate }: { aggregate: StatsCostAggregate }) {
           </div>
           <div className="mt-1 text-fg-4" style={{ fontSize: "10px" }}>
             {metric.median_usd === null
-              ? "— median"
-              : `${formatCostAmount(metric.median_usd, metric.partial, metric.estimated)} median`}
+              ? `— median per ${costUnitNoun(metric.unit)}`
+              : `${formatCostAmount(metric.median_usd, metric.partial, metric.estimated)} median per ${costUnitNoun(metric.unit)}`}
           </div>
         </div>
       ))}
@@ -848,15 +846,9 @@ function HarnessCards({ aggregate }: { aggregate: StatsCostAggregate }) {
   );
 }
 
-function CostCell({
-  metric,
-  unit,
-}: {
-  metric: StatsHarnessCost | undefined;
-  unit: "Run" | "execution";
-}) {
+function CostCell({ metric }: { metric: StatsHarnessCost | undefined }) {
   if (!metric) return <span className="font-mono text-fg-4">—</span>;
-  const detail = coverage(metric, unit);
+  const detail = coverage(metric);
   return (
     <div className="flex flex-col items-end font-mono">
       <span>
@@ -1055,6 +1047,8 @@ function pairMetric(pair: StatsModelEffortPair): StatsHarnessCost {
     median_usd: pair.median_usd,
     unpriced_models: pair.unpriced_models,
     missing_reasons: pair.missing_reasons,
+    unit: pair.unit,
+    coverage: pair.coverage,
   };
 }
 
@@ -1082,7 +1076,6 @@ function effortNameCell(row: StatsEffortCostEntity): React.ReactNode {
 function CostTable({
   rows,
   harnesses,
-  unit,
   onOpen,
   renderName,
   expandablePairs = false,
@@ -1091,7 +1084,6 @@ function CostTable({
 }: {
   rows: StatsCostEntity[];
   harnesses: string[];
-  unit: "Run" | "execution";
   /** Node rows under one Pipeline (#892), or the efforts of one model (#906):
    *  select and combine them. */
   selection?: MasterSelection;
@@ -1194,7 +1186,6 @@ function CostTable({
                   </td>
                   <td className="py-2 text-right">
                     <CostCell
-                      unit={unit}
                       metric={{
                         harness: "total",
                         usd: row.usd,
@@ -1207,13 +1198,14 @@ function CostTable({
                         median_usd: row.median_usd,
                         unpriced_models: row.unpriced_models,
                         missing_reasons: row.missing_reasons,
+                        unit: row.unit,
+                        coverage: row.coverage,
                       }}
                     />
                   </td>
                   {harnesses.map((harness) => (
                     <td key={harness} className="py-2 text-right">
                       <CostCell
-                        unit={unit}
                         metric={row.harnesses.find(
                           (item) => item.harness === harness,
                         )}
@@ -1264,12 +1256,11 @@ function CostTable({
                             </span>
                           </td>
                           <td className="py-2 text-right">
-                            <CostCell unit={unit} metric={pairMetric(pair)} />
+                            <CostCell metric={pairMetric(pair)} />
                           </td>
                           {harnesses.map((harness) => (
                             <td key={harness} className="py-2 text-right">
                               <CostCell
-                                unit={unit}
                                 metric={pair.harnesses.find(
                                   (item) => item.harness === harness,
                                 )}
@@ -1377,29 +1368,21 @@ function CostTab({
         ) ?? null)
       : null;
 
+  // UI02: the model axis has its own Total — the fold of every slice, which
+  // reconciles with the model rows; `cost.total` is per Run.
   const aggregate =
     axis === "model"
-      ? (modelPipeline ?? effort ?? model ?? cost.total)
+      ? (modelPipeline ?? effort ?? model ?? cost.model_total)
       : (drilledPipeline ?? selected ?? cost.total);
   const periods =
     axis === "model"
-      ? ((modelPipeline ?? effort ?? model)?.by_period ?? cost.by_period)
+      ? ((modelPipeline ?? effort ?? model)?.by_period ??
+        cost.model_total_by_period)
       : drilledPipeline
         ? drilledPipeline.by_period
         : selected
           ? selected.by_period
           : cost.by_period;
-
-  // The denominator the headline names (ADR-0065 §3): a model bucket counts
-  // executions — the whole model axis reads "per execution" — and so does the
-  // Node level of the other axes.
-  const atNodeLevel =
-    axis === "model"
-      ? true
-      : axis === "pipeline"
-        ? selected !== null
-        : drilledPipeline !== null;
-  const detailUnit: "Run" | "execution" = atNodeLevel ? "execution" : "Run";
 
   const masterSelection =
     axis === "pipeline"
@@ -1632,15 +1615,18 @@ function CostTab({
             aggregate.partial,
             aggregate.estimated,
           )}{" "}
-          median per {detailUnit}
+          median per {costUnitNoun(aggregate.unit)}
         </div>
         <div className="mt-4">
           <HarnessCards aggregate={aggregate} />
         </div>
-        {aggregate.unknown > 0 && (
-          <div className="mt-4 text-st-await" style={{ fontSize: "10.5px" }}>
-            {aggregate.unknown} {detailUnit}
-            {aggregate.unknown === 1 ? "" : "s"} without computable cost
+        {aggregate.executions > 0 && (
+          <div
+            className={`mt-4 ${aggregate.coverage.partial + aggregate.coverage.unavailable > 0 ? "text-st-await" : "text-fg-3"}`}
+            style={{ fontSize: "10.5px" }}
+            data-testid="stats-cost-coverage"
+          >
+            Coverage: {formatCoverage(aggregate.coverage, aggregate.unit)}
           </div>
         )}
         <div className="mt-4">
@@ -1655,7 +1641,6 @@ function CostTab({
             key={`${axis}-${selectedId ?? ""}-${drilledPipelineId ?? ""}-${selectedModelId ?? ""}-${selectedEffortId ?? "total"}-${selectedPipelineId ?? ""}`}
             rows={detailRows}
             harnesses={tableHarnesses}
-            unit={detailUnit}
             onOpen={onOpen}
             renderName={detailRenderName}
             expandablePairs={axis !== "model"}
