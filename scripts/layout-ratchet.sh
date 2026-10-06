@@ -88,9 +88,14 @@ cd "$(git rev-parse --show-toplevel)"
 #   PipelineValidation.tsx and its test — the ValidationIndicator and the
 #   ValidatePipelineModal of a Pipeline validated per Project, rendered by BOTH TabBar and
 #   LibraryRow. The sectioning rule lives in lib/pipelineValidation.
+# crates/pdo-daemon/src: 94 (UI04, docs/plans/dashboard-and-analytics.md) admits
+# stats_dashboard.rs — ONE concern: the Dashboard's summary of run outcomes and
+# live attention, folded from the run projection. It is neither cost (stats.rs)
+# nor execution performance (stats_performance.rs), and it consumes both's
+# shared identity rule (stats::project_identity_for_root) instead of copying it.
 BASELINES='
 frontend/src/components 206
-crates/pdo-daemon/src 93
+crates/pdo-daemon/src 94
 '
 
 fail=0

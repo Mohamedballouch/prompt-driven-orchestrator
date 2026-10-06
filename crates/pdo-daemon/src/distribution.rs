@@ -120,12 +120,32 @@ fn tukey_fences(sorted: &[f64], q1: f64, q3: f64) -> (f64, f64) {
     (fence_low, fence_high)
 }
 
+/// The R-7 quantile at `p` ∈ [0, 1] of unordered `values`, `None` when empty —
+/// the same estimator as [`r7_distribution`], for one percentile (UI04's p95).
+pub(crate) fn r7_percentile(values: &[f64], p: f64) -> Option<f64> {
+    if values.is_empty() {
+        return None;
+    }
+    let mut sorted = values.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    Some(r7_quantile(&sorted, p))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn close(a: f64, b: f64) -> bool {
         (a - b).abs() < 1e-9
+    }
+
+    #[test]
+    fn r7_percentile_interpolates_and_is_none_when_empty() {
+        assert_eq!(r7_percentile(&[], 0.95), None);
+        assert_eq!(r7_percentile(&[7.0], 0.95), Some(7.0));
+        // h = 19 * 0.95 = 18.05 → 19 + 0.05 * (20 - 19)
+        let values: Vec<f64> = (1..=20).map(f64::from).collect();
+        assert!((r7_percentile(&values, 0.95).unwrap() - 19.05).abs() < 1e-9);
     }
 
     #[test]

@@ -88,6 +88,7 @@ mod skill_sidecar;
 pub mod stale_detector;
 mod stats;
 mod stats_absorption;
+mod stats_dashboard;
 mod stats_performance;
 pub mod steering;
 mod structured_diff;
@@ -5501,6 +5502,9 @@ fn build_router(state: Arc<AppState>) -> Router {
             "/stats/performance",
             get(stats_performance::stats_performance),
         )
+        // UI04: the Dashboard's bounded summary — live attention, active Runs,
+        // recent results and the period's outcomes. Read-only.
+        .route("/stats/dashboard", get(stats_dashboard::stats_dashboard))
         // Absorptions (#888, ADR-0077): instance configuration, applied on read by
         // the three `/stats/*` folds above.
         .route(
@@ -30324,6 +30328,53 @@ mod tests {
         let none = call(&state, &format!("{base}&project=no-such-project")).await;
         assert_eq!(none["total"]["executions"], 0);
         assert_eq!(none["total"]["usd"], serde_json::Value::Null);
+    }
+
+    #[tokio::test]
+    async fn stats_dashboard_summarizes_the_cohort_and_live_attention() {
+        let state = test_state().await;
+        let repo = state.repo_root.to_string_lossy().into_owned();
+        async fn insert_event(db: &sqlx::SqlitePool, run: &str, ts: &str, kind: &str, node: Option<&str>, payload: serde_json::Value) {
+            sqlx::query("INSERT INTO events (run_id, ts, kind, node_id, iter, payload) VALUES (?, ?, ?, ?, ?, ?)")
+                .bind(run).bind(ts).bind(kind).bind(node).bind(node.map(|_| 1_i64)).bind(payload.to_string())
+                .execute(db).await.unwrap();
+        }
+        let started = |target: &str| serde_json::json!({
+            "pipeline_id": "p", "pipeline_name": "impl", "target_repo": target, "harness": "claude",
+            "node_defs": [{"id": "worker", "name": "Worker", "node_type": "agent", "inputs": [], "outputs": []}]
+        });
+        insert_event(&state.db, "dash-done", "2033-04-02T09:00:00.000Z", "run_started", None, started(&repo)).await;
+        insert_event(&state.db, "dash-done", "2033-04-02T09:20:00.000Z", "run_completed", None, serde_json::json!({})).await;
+        insert_event(&state.db, "dash-wait", "2033-04-02T10:00:00.000Z", "run_started", None, started("/tmp/pdo-dash-other")).await;
+        insert_event(&state.db, "dash-wait", "2033-04-02T10:01:00.000Z", "node_started", Some("worker"), serde_json::json!({"node_type": "agent"})).await;
+        insert_event(&state.db, "dash-wait", "2033-04-02T10:02:00.000Z", "node_awaiting_user", Some("worker"),
+                     serde_json::json!({"cause": "declared", "message": "Which layout?"})).await;
+
+        async fn call(state: &Arc<AppState>, uri: &str) -> serde_json::Value {
+            let response = build_router(state.clone())
+                .oneshot(Request::builder().uri(uri).body(Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            serde_json::from_slice(&axum::body::to_bytes(response.into_body(), usize::MAX).await.unwrap()).unwrap()
+        }
+        let base = "/stats/dashboard?from=2033-04-01T00:00:00.000Z&to=2033-04-03T00:00:00.000Z";
+
+        let all = call(&state, base).await;
+        assert_eq!(all["cohort"]["started"], 2);
+        assert_eq!(all["completion"]["completed"], 1);
+        assert_eq!(all["completion_time"]["median_ms"], 20 * 60 * 1000);
+        assert_eq!(all["live"]["awaiting_user"], 1);
+        assert_eq!(all["attention"][0]["kind"], "waiting_for_user");
+        assert_eq!(all["attention"][0]["reason"], "Which layout?");
+        assert_eq!(all["recent_results"][0]["run_id"], "dash-done");
+        assert!(all["computed_at"].is_string());
+
+        let other = call(&state, &format!("{base}&project=%2Ftmp%2Fpdo-dash-other")).await;
+        assert_eq!(other["project"], "/tmp/pdo-dash-other");
+        assert_eq!(other["cohort"]["started"], 1);
+        assert_eq!(other["recent_results"].as_array().unwrap().len(), 0);
+        assert_eq!(other["projects"].as_array().unwrap().len(), 2);
     }
 
     #[tokio::test]
