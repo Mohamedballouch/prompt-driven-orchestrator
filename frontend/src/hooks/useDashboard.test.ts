@@ -99,6 +99,87 @@ describe("useDashboard (UI04)", () => {
     expect(result.current.summary?.computed_at).toBe("second");
   });
 
+  it("moves the window to the new UTC day on the first render after midnight", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(new Date("2033-04-07T23:59:50.000Z"));
+    vi.mocked(fetchDashboard).mockResolvedValue(summary("a"));
+    vi.mocked(fetchStatsCost).mockResolvedValue(cost);
+    const s = socket();
+    const { result, rerender } = renderHook(() =>
+      useDashboard({ active: true, period: "7d", project: null, subscribe: s.subscribe }),
+    );
+    await waitFor(() => expect(fetchDashboard).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(fetchDashboard).mock.calls[0][1]).toBe("2033-04-08T00:00:00.000Z");
+    vi.setSystemTime(new Date("2033-04-08T00:00:10.000Z"));
+    rerender();
+    await waitFor(() => expect(fetchDashboard).toHaveBeenCalledTimes(2));
+    const [from, to] = vi.mocked(fetchDashboard).mock.calls[1];
+    expect(from).toBe("2033-04-02T00:00:00.000Z");
+    expect(to).toBe("2033-04-09T00:00:00.000Z");
+    expect(result.current.window.days.at(-1)).toBe("2033-04-08");
+  });
+
+  it("never shows the previous key's data as the new key's", async () => {
+    vi.mocked(fetchDashboard).mockResolvedValueOnce(summary("a")).mockRejectedValueOnce(new Error("nope"));
+    vi.mocked(fetchStatsCost).mockResolvedValue(cost);
+    const s = socket();
+    const { result, rerender } = renderHook(
+      (props: { project: string | null }) =>
+        useDashboard({ active: true, period: "30d", project: props.project, subscribe: s.subscribe }),
+      { initialProps: { project: null as string | null } },
+    );
+    await waitFor(() => expect(result.current.summary?.computed_at).toBe("a"));
+    rerender({ project: "p2" });
+    await waitFor(() => expect(result.current.summaryError).toBe("nope"));
+    expect(result.current.summary).toBeNull();
+    expect(result.current.summaryStale).toBe(false);
+  });
+
+  it("ignores a response that lands after deactivation", async () => {
+    let resolveFirst: (s: DashboardSummary) => void = () => {};
+    vi.mocked(fetchDashboard).mockImplementationOnce(() => new Promise((r) => { resolveFirst = r; }));
+    vi.mocked(fetchStatsCost).mockResolvedValue(cost);
+    const s = socket();
+    const { result, rerender } = renderHook(
+      (props: { active: boolean }) =>
+        useDashboard({ active: props.active, period: "30d", project: null, subscribe: s.subscribe }),
+      { initialProps: { active: true } },
+    );
+    rerender({ active: false });
+    act(() => resolveFirst(summary("late")));
+    await Promise.resolve();
+    expect(result.current.summary).toBeNull();
+    expect(result.current.summaryLoading).toBe(false);
+  });
+
+  it("clears the debounce timer and unsubscribes on unmount", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.mocked(fetchDashboard).mockResolvedValue(summary("a"));
+    vi.mocked(fetchStatsCost).mockResolvedValue(cost);
+    const s = socket();
+    const unsub = vi.fn();
+    const subscribe = (fn: (msg: WsMessage) => void) => { const off = s.subscribe(fn); return () => { unsub(); off(); }; };
+    const { unmount } = renderHook(() => useDashboard({ active: true, period: "30d", project: null, subscribe }));
+    await waitFor(() => expect(fetchDashboard).toHaveBeenCalledTimes(1));
+    act(() => s.emit({ type: "event" } as WsMessage));
+    unmount();
+    await act(async () => { await vi.advanceTimersByTimeAsync(2100); });
+    expect(fetchDashboard).toHaveBeenCalledTimes(1);
+    expect(unsub).toHaveBeenCalled();
+  });
+
+  it("a cost failure leaves the summary intact", async () => {
+    vi.mocked(fetchDashboard).mockResolvedValue(summary("a"));
+    vi.mocked(fetchStatsCost).mockRejectedValue(new Error("cost down"));
+    const s = socket();
+    const { result } = renderHook(() =>
+      useDashboard({ active: true, period: "30d", project: null, subscribe: s.subscribe }),
+    );
+    await waitFor(() => expect(result.current.costError).toBe("cost down"));
+    expect(result.current.cost).toBeNull();
+    expect(result.current.summary?.computed_at).toBe("a");
+  });
+
   it("does nothing while inactive", () => {
     const s = socket();
     renderHook(() => useDashboard({ active: false, period: "30d", project: null, subscribe: s.subscribe }));

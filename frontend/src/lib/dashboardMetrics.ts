@@ -7,6 +7,11 @@ export const DEFAULT_DASHBOARD_PERIOD: DashboardPeriod = "30d";
 const PERIOD_DAYS: Record<DashboardPeriod, number> = { "7d": 7, "30d": 30, "90d": 90 };
 const DAY_MS = 86_400_000;
 
+/** The UTC calendar day of `now` (`YYYY-MM-DD`): the key a window is valid for. */
+export function utcDayKey(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 10);
+}
+
 export function periodLabel(period: DashboardPeriod): string {
   return `Last ${PERIOD_DAYS[period]} days`;
 }

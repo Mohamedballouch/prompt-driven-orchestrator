@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetchDashboard, fetchStatsCost } from "../api";
 import type { DashboardSummary, StatsCost, WsMessage } from "../types";
-import { dashboardWindow, type DashboardPeriod } from "../lib/dashboardMetrics";
+import { dashboardWindow, utcDayKey, type DashboardPeriod } from "../lib/dashboardMetrics";
 
 /** A daemon event refreshes the summary at most this often (docs/reference/dashboard-metrics.md « Freshness »). */
 export const SUMMARY_REFRESH_DEBOUNCE_MS = 2000;
@@ -35,12 +35,18 @@ function message(error: unknown): string {
 export function useDashboard({ active, period, project, subscribe }: UseDashboardOptions): DashboardData {
   // The window is recomputed per period, not per render, so `from`/`to` are stable keys.
   // (`range`, not `window`: never shadow the browser global.)
-  const range = useMemo(() => dashboardWindow(period), [period]);
+  // `today` is read during render, so the first render after 00:00 UTC (a refresh, a
+  // reactivation, any re-render) moves the window and the effects below refetch.
+  const today = utcDayKey();
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `today` is the day key the window depends on.
+  const range = useMemo(() => dashboardWindow(period), [period, today]);
+  const key = `${range.from}|${range.to}|${project ?? ""}`;
 
-  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  // Each answer is stored with the request key it answered; it is exposed only for that key.
+  const [summaryAnswer, setSummaryAnswer] = useState<{ key: string; data: DashboardSummary } | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
-  const [cost, setCost] = useState<StatsCost | null>(null);
+  const [costAnswer, setCostAnswer] = useState<{ key: string; data: StatsCost } | null>(null);
   const [costError, setCostError] = useState<string | null>(null);
   const [costLoading, setCostLoading] = useState(false);
   const summarySeq = useRef(0);
@@ -52,7 +58,7 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
     fetchDashboard(range.from, range.to, project)
       .then((data) => {
         if (seq !== summarySeq.current) return;
-        setSummary(data);
+        setSummaryAnswer({ key, data });
         setSummaryError(null);
       })
       .catch((error) => {
@@ -62,7 +68,7 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
       .finally(() => {
         if (seq === summarySeq.current) setSummaryLoading(false);
       });
-  }, [range.from, range.to, project]);
+  }, [range.from, range.to, project, key]);
 
   const loadCost = useCallback(() => {
     const seq = ++costSeq.current;
@@ -70,7 +76,7 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
     fetchStatsCost(range.from, range.to, "day", false, false, project)
       .then((data) => {
         if (seq !== costSeq.current) return;
-        setCost(data);
+        setCostAnswer({ key, data });
         setCostError(null);
       })
       .catch((error) => {
@@ -80,7 +86,7 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
       .finally(() => {
         if (seq === costSeq.current) setCostLoading(false);
       });
-  }, [range.from, range.to, project]);
+  }, [range.from, range.to, project, key]);
 
   useEffect(() => {
     if (!active) return;
@@ -90,6 +96,16 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
     loadSummary();
     loadCost();
     /* eslint-enable react-hooks/set-state-in-effect */
+    return () => {
+      // A response landing after deactivation or unmount is ignored.
+      // The refs are request counters, not DOM nodes: reading `.current` now is the point.
+      /* eslint-disable react-hooks/exhaustive-deps */
+      summarySeq.current++;
+      costSeq.current++;
+      /* eslint-enable react-hooks/exhaustive-deps */
+      setSummaryLoading(false);
+      setCostLoading(false);
+    };
   }, [active, loadSummary, loadCost]);
 
   useEffect(() => {
@@ -112,6 +128,9 @@ export function useDashboard({ active, period, project, subscribe }: UseDashboar
     loadSummary();
     loadCost();
   }, [loadSummary, loadCost]);
+
+  const summary = summaryAnswer?.key === key ? summaryAnswer.data : null;
+  const cost = costAnswer?.key === key ? costAnswer.data : null;
 
   return {
     window: range,
