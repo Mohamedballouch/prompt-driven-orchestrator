@@ -5,7 +5,7 @@
 // Mounts the REAL App with the harness of App.settingsClose.test.tsx (FakeWebSocket,
 // ResizeObserver stub, an explicit `./api` factory that throws on an unlisted export).
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from "vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 class ResizeObserverStub {
@@ -105,14 +105,20 @@ vi.mock("./api", () => {
       closeLibraryAssistant: vi.fn().mockResolvedValue(undefined),
       openLibraryAssistant: vi.fn().mockReturnValue(new Promise(() => {})),
       // A template opened as a tab (library row, Trigger): named after its id.
+      // `gone-pipe` is a Pipeline that no longer opens (a Trigger may still name it).
       fetchPipeline: vi.fn().mockImplementation((id: string) =>
-        Promise.resolve({
-          scope: "repo",
-          pipeline: { name: id, version: "1.0", variables: {}, nodes: [], edges: [] },
-          prompts: {},
-          diagnostics: [],
-        }),
+        id === "gone-pipe"
+          ? Promise.reject(new Error("pipeline not found"))
+          : Promise.resolve({
+              scope: "repo",
+              pipeline: { name: id, version: "1.0", variables: {}, nodes: [], edges: [] },
+              prompts: {},
+              diagnostics: [],
+            }),
       ),
+      // A selected Trigger's detail pane reads these.
+      fetchSettings: vi.fn().mockRejectedValue(new Error("no settings in this test")),
+      fetchTriggerFires: vi.fn().mockResolvedValue([]),
       fetchSessions: vi.fn().mockResolvedValue({ live: 0, cap: 20, version: "9.9.9-test" }),
       fetchTriggers: vi.fn().mockResolvedValue([]),
       fetchTriggersHealth: vi.fn().mockResolvedValue({
@@ -254,14 +260,58 @@ describe("App — the Dashboard (UI05)", () => {
     await waitFor(() => expect(screen.getByTestId("pipeline-info-panel")).toBeInTheDocument());
     expect(right()).not.toHaveAttribute("data-collapsed");
 
-    await userEvent.click(screen.getByRole("button", { name: "Dashboard" }));
+    expect(right()).not.toHaveAttribute("inert");
+
+    // Focus inside the pane when it folds (fireEvent: the click itself moves no focus).
+    const inPane = screen.getByTestId("pipeline-info-panel").querySelector<HTMLElement>("button")!;
+    inPane.focus();
+    expect(document.activeElement).toBe(inPane);
+    fireEvent.click(screen.getByRole("button", { name: "Dashboard" }));
     await screen.findByTestId("dashboard");
     expect(right()).toHaveAttribute("data-collapsed", "true");
+    // Folded and inert: nothing in it can be focused or pressed unseen, and focus
+    // that was in it is not stranded there.
+    expect(right()).toHaveAttribute("inert");
+    expect(document.activeElement).toBe(screen.getByRole("heading", { name: "Dashboard", level: 1 }));
     // Collapsed, not unmounted: the Run panel (and any terminal in it) is still there.
     expect(screen.getByTestId("pipeline-info-panel")).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: "Back to editor" }));
     await waitFor(() => expect(right()).not.toHaveAttribute("data-collapsed"));
+    expect(right()).not.toHaveAttribute("inert");
+  }, 20_000);
+
+  it("shows a Trigger's detail beside the Dashboard when its Pipeline cannot open", async () => {
+    const { fetchTriggers } = await import("./api");
+    vi.mocked(fetchTriggers).mockResolvedValue([
+      {
+        id: "t1",
+        name: "Nightly",
+        pipeline_id: "gone-pipe",
+        pipeline_name: "gone",
+        effective_repo: "/repo",
+        input_template: "",
+        variables: {},
+        cron: "0 3 * * *",
+        overlap_policy: "skip",
+        auto_name: true,
+        enabled: true,
+      },
+    ] as Awaited<ReturnType<typeof fetchTriggers>>);
+    try {
+      render(<App />);
+      await screen.findByTestId("dashboard");
+      await userEvent.click(screen.getByTestId("left-tab-triggers"));
+      await userEvent.click(await screen.findByTestId("trigger-row"));
+      expect(await screen.findByTestId("trigger-detail-panel")).toBeInTheDocument();
+      // No tab could open, so the Dashboard stays — with the detail beside it.
+      expect(screen.getByTestId("dashboard")).toBeInTheDocument();
+      const right = document.querySelector("[data-panel]#right")!;
+      expect(right).not.toHaveAttribute("data-collapsed");
+      expect(right).not.toHaveAttribute("inert");
+    } finally {
+      vi.mocked(fetchTriggers).mockResolvedValue([]);
+    }
   }, 20_000);
 
   it("opening a pipeline from the fresh-visit Dashboard shows its canvas", async () => {

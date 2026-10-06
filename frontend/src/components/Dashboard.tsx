@@ -165,7 +165,14 @@ export default function Dashboard({
     >
       <div className="mx-auto flex max-w-[1440px] flex-col gap-4">
         <header className="flex flex-wrap items-center gap-3">
-          <h1 id="dashboard-title" className="mr-1 font-semibold tracking-tight text-fg" style={{ fontSize: "18px" }}>
+          {/* Focusable by script only: where focus lands when the right pane it was
+              in folds away under the Dashboard (App). */}
+          <h1
+            id="dashboard-title"
+            tabIndex={-1}
+            className="mr-1 font-semibold tracking-tight text-fg focus:outline-none"
+            style={{ fontSize: "18px" }}
+          >
             Dashboard
           </h1>
           <select
@@ -335,7 +342,7 @@ export default function Dashboard({
             value={summary ? String(summary.live.running) : "—"}
             sub={
               summary
-                ? `${summary.live.awaiting_user} awaiting you · ${summary.live.paused} paused`
+                ? `${summary.live.awaiting_user} awaiting user · ${summary.live.paused} paused`
                 : pendingText
             }
             action={() => (
@@ -549,6 +556,7 @@ function AttentionRow({
   const kind = ATTENTION_KIND[item.kind];
   const label = runLabel(item.run_name, item.pipeline_name, item.run_id);
   const nameId = useId();
+  const shortId = useId();
   return (
     <li data-testid="dashboard-attention-item" className="flex items-center gap-3 border-t border-line px-3 py-2">
       <kind.Icon size={16} aria-hidden="true" className={`shrink-0 ${kind.tone}`} />
@@ -559,7 +567,7 @@ function AttentionRow({
             {label.title}
           </span>
           <span className="text-fg-3">
-            <Secondary label={label} runId={item.run_id} />
+            <Secondary label={label} runId={item.run_id} id={shortId} />
             {item.node_name && ` · ${item.node_name}`}
           </span>
         </div>
@@ -578,7 +586,7 @@ function AttentionRow({
       <button
         type="button"
         aria-label={`Open ${label.title}`}
-        aria-describedby={nameId}
+        aria-describedby={rowDescription(label, nameId, shortId)}
         onClick={() => onOpenRun(item.run_id, item.node_id)}
         className={`shrink-0 ${SECONDARY_BUTTON}`}
       >
@@ -588,15 +596,30 @@ function AttentionRow({
   );
 }
 
-/** A Run's secondary line: its Pipeline, or — unnamed — its short id. */
-function Secondary({ label, runId }: { label: ReturnType<typeof runLabel>; runId: string }) {
+/** A Run's secondary line: its Pipeline, or — unnamed — its short id. `id` lands
+ *  on the short id, so a row action can be told apart from its neighbours'. */
+function Secondary({
+  label,
+  runId,
+  id,
+}: {
+  label: ReturnType<typeof runLabel>;
+  runId: string;
+  id?: string;
+}) {
   return label.secondaryIsId ? (
-    <span className="font-mono" title={runId}>
+    <span id={id} className="font-mono" title={runId}>
       {label.secondary}
     </span>
   ) : (
     <>{label.secondary}</>
   );
+}
+
+/** What a row action is described by: the Run's title, plus its short id when it
+ *  is unnamed (two unnamed Runs of one Pipeline share the title). */
+function rowDescription(label: ReturnType<typeof runLabel>, nameId: string, shortId: string): string {
+  return label.secondaryIsId ? `${nameId} ${shortId}` : nameId;
 }
 
 function currentStep(run: DashboardActiveRun): string {
@@ -665,6 +688,8 @@ function ResultRow({
 }) {
   const label = runLabel(result.run_name, result.pipeline_name, result.run_id);
   const nameId = useId();
+  const shortId = useId();
+  const describedBy = rowDescription(label, nameId, shortId);
   return (
     <li data-testid="dashboard-result" className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-line px-3 py-2">
       <CircleCheck size={16} aria-hidden="true" className="shrink-0 text-st-done" />
@@ -673,7 +698,7 @@ function ResultRow({
           {label.title}
         </div>
         <div className="text-fg-3" style={{ fontSize: "11px" }}>
-          <Secondary label={label} runId={result.run_id} /> · Completed {ago(result.completed_at, now)} · took{" "}
+          <Secondary label={label} runId={result.run_id} id={shortId} /> · Completed {ago(result.completed_at, now)} · took{" "}
           <span className="font-mono">{formatDuration(result.duration_ms) ?? "—"}</span>
           {result.review_pending > 0 && (
             <span className="text-st-await">
@@ -687,7 +712,7 @@ function ResultRow({
         <button
           type="button"
           onClick={() => onOpenRun(result.run_id, null)}
-          aria-describedby={nameId}
+          aria-describedby={describedBy}
           className={SECONDARY_BUTTON}
         >
           Open result
@@ -698,12 +723,15 @@ function ResultRow({
           href={reviewUrl(result.run_id)}
           target="_blank"
           rel="noopener noreferrer"
-          aria-describedby={nameId}
+          aria-describedby={describedBy}
           title="Opens the Review page in a new browser tab"
           className={SECONDARY_BUTTON}
         >
           Review changes
           <SquareArrowOutUpRight size={11} aria-hidden="true" />
+          {/* `aria-describedby` wins over `title`: the new-tab notice rides in the name. */}
+          {" "}
+          <span className="sr-only">(opens in a new tab)</span>
         </a>
       </div>
     </li>

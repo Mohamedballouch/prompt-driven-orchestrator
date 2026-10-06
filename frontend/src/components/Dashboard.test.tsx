@@ -78,6 +78,8 @@ describe("Dashboard (UI05)", () => {
     expect(screen.getByTestId("dashboard-card-duration")).toHaveTextContent("12m 34s");
     expect(screen.getByTestId("dashboard-card-duration")).toHaveTextContent("4 completed Runs");
     expect(screen.getByTestId("dashboard-card-live")).toHaveTextContent("Live now");
+    // « awaiting user », like the status word: incident waits are counted too, not only questions.
+    expect(screen.getByTestId("dashboard-card-live")).toHaveTextContent("1 awaiting user · 0 paused");
     expect(screen.getByTestId("dashboard-card-attention")).toHaveTextContent("Live now");
   });
 
@@ -107,7 +109,7 @@ describe("Dashboard (UI05)", () => {
     const { onOpenRun } = setup();
     const row = await screen.findByTestId("dashboard-result");
     expect(row).toHaveTextContent("2 review comments pending");
-    const review = within(row).getByRole("link", { name: "Review changes" });
+    const review = within(row).getByRole("link", { name: "Review changes (opens in a new tab)" });
     expect(review).toHaveAttribute("href", "/runs/r-done/review");
     // A new browser tab: the editor tabs hidden under the Dashboard keep their unsaved edits.
     expect(review).toHaveAttribute("target", "_blank");
@@ -186,6 +188,8 @@ describe("Dashboard (UI05)", () => {
     const result = screen.getByTestId("dashboard-result");
     expect(result.textContent?.match(/impl/g)).toHaveLength(1);
     expect(result).toHaveTextContent("def5678");
+    // Two unnamed Runs of one Pipeline share a title: the short id tells their actions apart.
+    expect(within(result).getByRole("button", { name: "Open result" })).toHaveAccessibleDescription("impl def5678");
   });
 
   it("says which lists the period does not narrow", async () => {
@@ -202,7 +206,9 @@ describe("Dashboard (UI05)", () => {
     setup();
     const result = await screen.findByTestId("dashboard-result");
     expect(within(result).getByRole("button", { name: "Open result" })).toHaveAccessibleDescription("Add search");
-    expect(within(result).getByRole("link", { name: "Review changes" })).toHaveAccessibleDescription("Add search");
+    expect(
+      within(result).getByRole("link", { name: "Review changes (opens in a new tab)" }),
+    ).toHaveAccessibleDescription("Add search");
     const item = screen.getByTestId("dashboard-attention-item");
     expect(within(item).getByRole("button", { name: "Open Fix login" })).toHaveAccessibleDescription("Fix login");
   });

@@ -918,8 +918,22 @@ export default function App() {
   // the hidden tab. Collapsed, not unmounted: its terminals keep their sessions, and
   // it comes back at the persisted width on « Back to editor » or opening a Run.
   // The router's own `rightPaneCollapsed` still feeds what it fed (EditCanvas).
-  const rightPaneHidden = rightPaneCollapsed || dashboardVisible;
+  // A selected Trigger's detail is the exception: it belongs to no tab and shows
+  // beside the Dashboard (a Trigger whose Pipeline cannot open has no tab at all).
+  const dashboardFoldsRight = dashboardVisible && paneOwner !== "trigger";
+  const rightPaneHidden = rightPaneCollapsed || dashboardFoldsRight;
   const rightPanelRef = usePanelRef();
+  // The folded pane is `inert` (below): out of the tab order and the accessibility
+  // tree, so no keystroke reaches a terminal nobody can see. Focus already inside
+  // it would be stranded — it moves to the Dashboard's heading.
+  const rightPaneElementRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    if (!dashboardFoldsRight) return;
+    const pane = rightPaneElementRef.current;
+    if (pane && document.activeElement && pane.contains(document.activeElement)) {
+      document.getElementById("dashboard-title")?.focus();
+    }
+  }, [dashboardFoldsRight]);
   const rightCollapsedRef = useRef(rightPaneHidden);
   rightCollapsedRef.current = rightPaneHidden;
   const [rightCollapsible, setRightCollapsible] = useState(rightPaneHidden);
@@ -1085,9 +1099,13 @@ export default function App() {
             minSize={minSizePx}
             collapsible={rightCollapsible}
             panelRef={rightPanelRef}
+            elementRef={rightPaneElementRef}
             id="right"
             className="panel-r"
             data-collapsed={rightPaneHidden || undefined}
+            // UI05: folded under the Dashboard, the pane stays mounted (its
+            // sockets survive) but nothing in it can be focused or pressed.
+            inert={dashboardFoldsRight}
           >
             {paneOwner === "trigger" && selectedTrigger ? (
               <TriggerDetailPanel
