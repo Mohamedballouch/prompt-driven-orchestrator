@@ -1,0 +1,378 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "skipped",
+  "type": "architecture",
+  "quality": "showcase",
+  "startedAt": "2026-10-16T12:00:46.387Z",
+  "specification": {
+    "path": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/candidate.json",
+    "sha256": "6582398a0469ed2f192b76156014ed69d7076e88297b255aad46b9860058f0e5",
+    "bytes": 9873
+  },
+  "artifact": {
+    "path": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html",
+    "sha256": "a8161051cebb70323f94e5e12442117696df86526f2c5661d622462382b0a6b5",
+    "bytes": 838348
+  },
+  "stages": {
+    "validate": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": null,
+      "execution": "embedded-in-deliver",
+      "command": [
+        "/opt/node22/bin/node",
+        "/root/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "architecture",
+        "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/candidate.json",
+        "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/user/rl-manufacture-microgrid",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": true,
+        "command": "validate",
+        "specification": {
+          "sha256": "6582398a0469ed2f192b76156014ed69d7076e88297b255aad46b9860058f0e5",
+          "bytes": 9873
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        }
+      }
+    },
+    "deliver": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 1015,
+      "command": [
+        "/opt/node22/bin/node",
+        "/root/.agents/skills/archify/bin/archify.mjs",
+        "deliver",
+        "architecture",
+        "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/candidate.json",
+        "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html",
+        "--quality",
+        "showcase",
+        "--repo-root",
+        "/home/user/rl-manufacture-microgrid",
+        "--json"
+      ],
+      "receipt": {
+        "schemaVersion": 1,
+        "receiptId": "b335c84e-5efe-4bd4-9fb0-14cf44eb9ec5",
+        "ok": true,
+        "command": "deliver",
+        "type": "architecture",
+        "input": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/candidate.json",
+        "output": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html",
+        "specification": {
+          "sha256": "6582398a0469ed2f192b76156014ed69d7076e88297b255aad46b9860058f0e5",
+          "bytes": 9873
+        },
+        "artifact": {
+          "sha256": "a8161051cebb70323f94e5e12442117696df86526f2c5661d622462382b0a6b5",
+          "bytes": 838348
+        },
+        "validation": {
+          "checksPassed": 9,
+          "checkCount": 9,
+          "compositionProfile": "showcase",
+          "compositionStatus": "pass",
+          "errors": 0,
+          "warnings": 0
+        },
+        "evidence": {
+          "verified": true,
+          "repository": "https://github.com/Mohamedballouch/rl-manufacture-microgrid",
+          "revision": "f719a112a81db9d8a18ae20ee23553a523f50b17",
+          "references": 23
+        },
+        "update": {
+          "status": "unavailable",
+          "installedVersion": null,
+          "availableVersion": null,
+          "releaseNotes": null,
+          "checkedAt": null,
+          "source": null,
+          "noticeRequired": false,
+          "noticeText": null,
+          "reason": "disabled"
+        }
+      }
+    },
+    "check": {
+      "status": "pass",
+      "exitCode": 0,
+      "durationMs": 282,
+      "command": [
+        "/opt/node22/bin/node",
+        "/root/.agents/skills/archify/bin/archify.mjs",
+        "check",
+        "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html",
+        "--require-provenance"
+      ],
+      "receipt": {
+        "ok": true,
+        "file": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html",
+        "artifact": {
+          "sha256": "a8161051cebb70323f94e5e12442117696df86526f2c5661d622462382b0a6b5",
+          "bytes": 838348
+        },
+        "checks": [
+          {
+            "name": "single_svg",
+            "ok": true,
+            "details": [
+              "found 1 <svg> block(s)"
+            ]
+          },
+          {
+            "name": "finite_svg",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "orthogonal_arrows",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "label_route_clearance",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_crossings",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "relationship_corridors",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "container_border_runs",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "route_rhythm",
+            "ok": true,
+            "details": []
+          },
+          {
+            "name": "legend_clearance",
+            "ok": true,
+            "details": []
+          }
+        ],
+        "composition": {
+          "schemaVersion": 1,
+          "profile": "showcase",
+          "status": "pass",
+          "summary": {
+            "errors": 0,
+            "warnings": 0
+          },
+          "metrics": {
+            "properCrossings": 0,
+            "resolvedCrossovers": 0,
+            "ambiguousCorridors": 0,
+            "arrowheadCollisions": 0,
+            "containerBorderRuns": 0,
+            "labelRouteClearanceIssues": 0,
+            "labelCanvasOverflowIssues": 0,
+            "minLabelRouteClearance": 20,
+            "desktopReadabilityIssues": 0,
+            "viewportHeightIssues": 0,
+            "minProjectedNodeTextPx": 6.584070796460177,
+            "maxBends": 2,
+            "routesOverSuggestedBends": 0,
+            "maxStretch": 1,
+            "routesOverSuggestedStretch": 0,
+            "minSegmentPx": 60,
+            "minInteriorSegmentPx": 143,
+            "shortSegmentCount": 0,
+            "shortEndpointSegmentCount": 0,
+            "shortInteriorSegmentCount": 0,
+            "microSegmentCount": 0
+          },
+          "suggestedLimits": {
+            "bendsPerRelationship": 2,
+            "stretch": 1.35,
+            "segmentPx": 16,
+            "microSegmentPx": 8
+          },
+          "routeReview": {
+            "crossings": [],
+            "detours": []
+          },
+          "leadingSpace": {
+            "measured": true,
+            "emptyTopPx": 40,
+            "emptyTopRatio": 0.044,
+            "occupiedTop": 40,
+            "viewBoxTop": 0,
+            "canvasHeight": 912,
+            "typicalNodeHeight": 64,
+            "reviewSuggested": false
+          },
+          "desktopReadability": {
+            "budgetBasis": "legacy-930",
+            "readerContract": "declared-wide-v1",
+            "availableDiagramWidth": 930,
+            "actualBudgetPx": 930,
+            "limit": "legacy",
+            "requestedTargetPx": 7.5,
+            "requestedTargetMet": false,
+            "hardFloorPx": 6,
+            "hardFloorMet": true,
+            "minimumOwner": {
+              "kind": "edge",
+              "id": "runner-decide",
+              "from": "runner",
+              "to": "supervisor"
+            },
+            "minimumSourceTextPx": 8,
+            "minimumProjectedTextPx": 6.584070796460177,
+            "semanticTextCount": 39
+          },
+          "issues": []
+        },
+        "provenance": "current",
+        "deliveryReceiptId": "b335c84e-5efe-4bd4-9fb0-14cf44eb9ec5"
+      }
+    },
+    "browser-check": {
+      "status": "skipped",
+      "exitCode": 2,
+      "durationMs": 54,
+      "command": [
+        "/opt/node22/bin/node",
+        "/root/.agents/skills/archify/bin/archify.mjs",
+        "browser-check",
+        "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html",
+        "--json",
+        "--require-provenance"
+      ],
+      "execution": "in-process",
+      "receipt": {
+        "schemaVersion": 1,
+        "ok": false,
+        "command": "browser-check",
+        "evidenceKind": "automated-browser",
+        "status": "skipped",
+        "visualReview": "not-requested",
+        "provenance": "current",
+        "deliveryReceiptId": "b335c84e-5efe-4bd4-9fb0-14cf44eb9ec5",
+        "artifact": {
+          "path": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html",
+          "sha256": "a8161051cebb70323f94e5e12442117696df86526f2c5661d622462382b0a6b5",
+          "bytes": 838348
+        },
+        "state": {
+          "detail": "read",
+          "motion": "still"
+        },
+        "chrome": {
+          "status": "unavailable",
+          "executable": null
+        },
+        "diagnostics": [
+          {
+            "code": "viewer/chrome-unavailable",
+            "severity": "warning",
+            "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+            "subject": {
+              "artifact": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html"
+            },
+            "evidence": {
+              "executable": null
+            },
+            "supportedFixes": [
+              "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+            ]
+          }
+        ],
+        "containment": {
+          "status": "skipped",
+          "policy": "fit-or-reader-declared-readable-vertical-scroll",
+          "viewports": []
+        },
+        "themeStates": {
+          "status": "skipped",
+          "viewports": []
+        },
+        "readability": {
+          "status": "skipped",
+          "minimumProjectedNodeTextPx": 6,
+          "viewports": []
+        },
+        "viewerChrome": {
+          "status": "skipped",
+          "viewports": []
+        },
+        "captures": {
+          "status": "not-requested",
+          "screenshots": [],
+          "contactSheet": null
+        },
+        "sidecars": {
+          "receipt": "microgrid-llm-marl.browser-check.json",
+          "files": []
+        },
+        "error": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path."
+      }
+    }
+  },
+  "diagnostics": [
+    {
+      "code": "viewer/chrome-unavailable",
+      "severity": "warning",
+      "message": "Chrome or Chromium is unavailable. Set ARCHIFY_CHROME to its executable path.",
+      "subject": {
+        "artifact": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html"
+      },
+      "evidence": {
+        "executable": null
+      },
+      "supportedFixes": [
+        "set ARCHIFY_CHROME to a Chrome or Chromium executable and rerun browser-check"
+      ]
+    }
+  ],
+  "evidence": {
+    "receipt": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.finalize.json",
+    "summaryReceipt": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.finalize-summary.json",
+    "browserCheckReceipt": "/home/user/prompt-driven-orchestrator/.archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.browser-check.json"
+  },
+  "visualReview": "not-requested",
+  "failedStage": "browser-check",
+  "finishedAt": "2026-10-16T12:00:47.912Z",
+  "durationMs": 1525,
+  "update": {
+    "status": "unavailable",
+    "installedVersion": null,
+    "availableVersion": null,
+    "releaseNotes": null,
+    "checkedAt": null,
+    "source": null,
+    "noticeRequired": false,
+    "noticeText": null,
+    "reason": "cache-valid"
+  }
+}

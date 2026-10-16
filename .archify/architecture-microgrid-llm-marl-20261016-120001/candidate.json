@@ -1,0 +1,473 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "LLM-Supervised MARL: Manufacturing–Microgrid Control Loop",
+    "output": ".archify/architecture-microgrid-llm-marl-20261016-120001/microgrid-llm-marl.html",
+    "quality_profile": "showcase",
+    "locale": "en",
+    "repository": {
+      "url": "https://github.com/Mohamedballouch/rl-manufacture-microgrid",
+      "provider": "github",
+      "revision": "f719a112a81db9d8a18ae20ee23553a523f50b17"
+    }
+  },
+  "components": [
+    {
+      "id": "logger",
+      "type": "database",
+      "label": "Directive logs",
+      "sublabel": "llm_io / audit JSONL",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/directive_logger.py",
+          "line": 17,
+          "end_line": 40
+        }
+      ]
+    },
+    {
+      "id": "provider",
+      "type": "external",
+      "label": "LLM provider",
+      "sublabel": "OpenRouter · Groq · Ollama",
+      "pos": [
+        330,
+        40
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/llm_provider.py",
+          "line": 53,
+          "end_line": 86
+        }
+      ]
+    },
+    {
+      "id": "runner",
+      "type": "backend",
+      "label": "Train / eval runner",
+      "sublabel": "episode loop",
+      "pos": [
+        40,
+        180
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "eval_llm_marl.py",
+          "line": 1103,
+          "end_line": 1135,
+          "label": "decision cadence"
+        },
+        {
+          "path": "train_llm_marl.py",
+          "line": 247,
+          "end_line": 266,
+          "label": "train loop"
+        },
+        {
+          "path": "train_native.py",
+          "line": 569,
+          "end_line": 570,
+          "label": "backbone choice"
+        }
+      ]
+    },
+    {
+      "id": "supervisor",
+      "type": "backend",
+      "label": "LLMSupervisor",
+      "sublabel": "tools · debate · fallback",
+      "tag": "slow layer",
+      "pos": [
+        330,
+        180
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/llm_supervisor.py",
+          "line": 601,
+          "end_line": 657,
+          "label": "decide()"
+        },
+        {
+          "path": "src/llm_supervisor.py",
+          "line": 876,
+          "end_line": 912,
+          "label": "tool calls"
+        },
+        {
+          "path": "src/llm_supervisor.py",
+          "line": 1468,
+          "end_line": 1487,
+          "label": "failure fallback"
+        }
+      ]
+    },
+    {
+      "id": "validator",
+      "type": "security",
+      "label": "Directive validator",
+      "sublabel": "w_stability ≥ 0.1",
+      "pos": [
+        620,
+        180
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/directive_schema.py",
+          "line": 167,
+          "end_line": 180
+        },
+        {
+          "path": "src/llm_supervisor.py",
+          "line": 700,
+          "end_line": 710
+        }
+      ]
+    },
+    {
+      "id": "forecast",
+      "type": "backend",
+      "label": "ForecastTool",
+      "sublabel": "Chronos T5 / persistence",
+      "pos": [
+        40,
+        480
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/forecast_tool.py",
+          "line": 28,
+          "end_line": 41
+        }
+      ]
+    },
+    {
+      "id": "tools",
+      "type": "backend",
+      "label": "LLM tools",
+      "sublabel": "state, KPIs, forecast, sim",
+      "pos": [
+        330,
+        480
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/llm_tools.py",
+          "line": 500,
+          "end_line": 537
+        },
+        {
+          "path": "src/llm_tools.py",
+          "line": 112,
+          "end_line": 122
+        }
+      ]
+    },
+    {
+      "id": "env",
+      "type": "backend",
+      "label": "Multi-agent env",
+      "sublabel": "MultiAgentManufacturingEnv",
+      "tag": "fast layer",
+      "pos": [
+        620,
+        480
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/manufacturing_multi_env.py",
+          "line": 628,
+          "end_line": 664,
+          "label": "set_directives"
+        },
+        {
+          "path": "src/manufacturing_multi_env.py",
+          "line": 2101,
+          "end_line": 2140,
+          "label": "step"
+        }
+      ]
+    },
+    {
+      "id": "veto",
+      "type": "security",
+      "label": "Generator safety veto",
+      "sublabel": "SOC < 0.30 keeps backup",
+      "pos": [
+        900,
+        480
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/manufacturing_multi_env.py",
+          "line": 1768,
+          "end_line": 1789
+        },
+        {
+          "path": "src/manufacturing_multi_env.py",
+          "line": 291,
+          "end_line": 293
+        }
+      ]
+    },
+    {
+      "id": "devices",
+      "type": "backend",
+      "label": "6 device policies",
+      "sublabel": "SAC · PPO · MAPPO · DDQN",
+      "pos": [
+        620,
+        630
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/native_sac.py",
+          "line": 342,
+          "end_line": 345
+        },
+        {
+          "path": "src/native_ppo.py",
+          "line": 424
+        },
+        {
+          "path": "src/native_ddqn.py",
+          "line": 236
+        }
+      ]
+    },
+    {
+      "id": "plant",
+      "type": "backend",
+      "label": "Plant + microgrid",
+      "sublabel": "2 machines + 4 energy assets",
+      "pos": [
+        900,
+        630
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/manufacturing_multi_env.py",
+          "line": 447,
+          "end_line": 474
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "type": "database",
+      "label": "Moroccan site data",
+      "sublabel": "wind / irradiance CSV",
+      "pos": [
+        900,
+        780
+      ],
+      "size": [
+        160,
+        64
+      ],
+      "sources": [
+        {
+          "path": "src/data_loading.py",
+          "line": 77,
+          "end_line": 84
+        },
+        {
+          "path": "train_native.py",
+          "line": 71,
+          "end_line": 73
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Hourly step",
+      "wraps": [
+        "env",
+        "veto",
+        "devices",
+        "plant"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "runner-decide",
+      "from": "runner",
+      "to": "supervisor",
+      "label": "decide() / 15 h",
+      "variant": "emphasis"
+    },
+    {
+      "id": "runner-log",
+      "from": "runner",
+      "to": "logger",
+      "label": "log_directive"
+    },
+    {
+      "id": "sup-provider",
+      "from": "supervisor",
+      "to": "provider",
+      "label": "chat + tool schemas"
+    },
+    {
+      "id": "sup-validate",
+      "from": "supervisor",
+      "to": "validator",
+      "label": "JSON directive",
+      "variant": "emphasis"
+    },
+    {
+      "id": "sup-tools",
+      "from": "supervisor",
+      "to": "tools",
+      "label": "execute_tool"
+    },
+    {
+      "id": "tools-forecast",
+      "from": "tools",
+      "to": "forecast",
+      "label": "get_forecast"
+    },
+    {
+      "id": "tools-env",
+      "from": "tools",
+      "to": "env",
+      "label": "read state, KPIs",
+      "variant": "dashed"
+    },
+    {
+      "id": "validator-env",
+      "from": "validator",
+      "to": "env",
+      "label": "set_directives (validated)",
+      "variant": "security"
+    },
+    {
+      "id": "env-obs",
+      "from": "env",
+      "to": "devices",
+      "label": "noisy local obs"
+    },
+    {
+      "id": "devices-act",
+      "from": "devices",
+      "to": "env",
+      "label": "hourly actions",
+      "variant": "emphasis"
+    },
+    {
+      "id": "env-veto",
+      "from": "env",
+      "to": "veto",
+      "label": "gen-off flag",
+      "variant": "security"
+    },
+    {
+      "id": "veto-plant",
+      "from": "veto",
+      "to": "plant",
+      "label": "backup kept on",
+      "variant": "security"
+    },
+    {
+      "id": "env-plant",
+      "from": "env",
+      "to": "plant",
+      "label": "run_plant · settle"
+    },
+    {
+      "id": "data-plant",
+      "from": "data",
+      "to": "plant",
+      "label": "8,760 h kW series"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "violet",
+      "title": "Slow layer (every 15 h)",
+      "items": [
+        "The LLM picks one of five operating modes, re-weights the shared reward and tightens soft constraints",
+        "It never actuates a device: it only emits a JSON directive",
+        "If a call or parse fails, the last validated directive stays in force"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Fast layer (every hour)",
+      "items": [
+        "Six learned controllers: two machines, wind, solar, battery, generator",
+        "The backbone is chosen with train_native.py --backbone sac|ppo|mappo|ddqn",
+        "Observations end with the 4 current directive weights"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "Authority guards",
+      "items": [
+        "The validator clamps and normalizes weights and enforces a 0.1 stability floor",
+        "force_generator_off is ignored while SOC < 0.30 and renewables are below demand"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Evaluation",
+      "items": [
+        "Non-LLM controls: rule-based, static weights, scheduled ToU, random directive",
+        "The README states no LLM advantage has been established yet"
+      ]
+    }
+  ]
+}
